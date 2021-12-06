@@ -379,8 +379,10 @@ ChecksumLoop:
 	moveq	#0,d7
 
 	move.w	#bytesToLcnt($200),d6
--	move.l	d7,(a6)+
-	dbf	d6,-
+
+.clearRAM:
+	move.l	d7,(a6)+
+	dbf	d6,.clearRAM
 
 	move.b	(HW_Version).l,d0
 	andi.b	#$C0,d0
@@ -463,18 +465,22 @@ V_Int:
 	tst.b	(Vint_routine).w
 	beq.w	Vint_Lag
 
--	move.w	(VDP_control_port).l,d0
+.loop:
+	move.w	(VDP_control_port).l,d0
 	andi.w	#8,d0
-	beq.s	-
+	beq.s	.loop
 
 	move.l	#vdpComm($0000,VSRAM,WRITE),(VDP_control_port).l
 	move.l	(Vscroll_Factor).w,(VDP_data_port).l ; send screen y-axis pos. to VSRAM
 	btst	#6,(Graphics_Flags).w ; is Megadrive PAL?
-	beq.s	+		; if not, branch
+	beq.s	.notPAL		; if not, branch
 
 	move.w	#$700,d0
--	dbf	d0,- ; wait here in a loop doing nothing for a while...
-+
+
+.waitPAL:
+	dbf	d0,.waitPAL ; wait here in a loop doing nothing for a while...
+
+.notPAL:
 	move.b	(Vint_routine).w,d0
 	move.b	#VintID_Lag,(Vint_routine).w
 	move.w	#1,(Hint_flag).w
@@ -526,11 +532,14 @@ loc_4C4:
 	beq.w	Vint0_noWater
 	move.w	(VDP_control_port).l,d0
 	btst	#6,(Graphics_Flags).w
-	beq.s	+
+	beq.s	.notPAL
 
 	move.w	#$700,d0
--	dbf	d0,- ; do nothing for a while...
-+
+
+.waitPAL:
+	dbf	d0,.waitPAL ; do nothing for a while...
+
+.notPAL:
 	move.w	#1,(Hint_flag).w
 
 	stopZ80
@@ -561,11 +570,14 @@ Vint0_noWater:
 	move.l	#vdpComm($0000,VSRAM,WRITE),(VDP_control_port).l
 	move.l	(Vscroll_Factor).w,(VDP_data_port).l
 	btst	#6,(Graphics_Flags).w
-	beq.s	+
+	beq.s	.notPAL
 
 	move.w	#$700,d0
--	dbf	d0,- ; do nothing for a while...
-+
+
+.waitPAL:
+	dbf	d0,.waitPAL ; do nothing for a while...
+
+.notPAL:
 	move.w	#1,(Hint_flag).w
 	move.w	(Hint_counter_reserve).w,(VDP_control_port).l
 	move.w	#$8200|(VRAM_Plane_A_Name_Table/$400),(VDP_control_port).l	; Set scroll A PNT base to $C000
@@ -588,25 +600,28 @@ Vint_SEGA:
 	dma68kToVDP Horiz_Scroll_Buf,VRAM_Horiz_Scroll_Table,VRAM_Horiz_Scroll_Table_Size,VRAM
 	jsrto	(SegaScr_VInt).l, JmpTo_SegaScr_VInt
 	tst.w	(Demo_Time_left).w	; is there time left on the demo?
-	beq.w	+	; if not, return
+	beq.w	.end	; if not, return
 	subq.w	#1,(Demo_Time_left).w	; subtract 1 from time left in demo
-+
+
+.end:
 	rts
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 ;VintSub14
 Vint_PCM:
 	move.b	(Vint_runcount+3).w,d0
 	andi.w	#$F,d0
-	bne.s	+
+	bne.s	.skipread
 
 	stopZ80
 	bsr.w	ReadJoypads
 	startZ80
-+
+
+.skipread:
 	tst.w	(Demo_Time_left).w	; is there time left on the demo?
-	beq.w	+	; if not, return
+	beq.w	.end	; if not, return
 	subq.w	#1,(Demo_Time_left).w	; subtract 1 from time left in demo
-+
+
+.end:
 	rts
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 ;VintSub4
@@ -614,9 +629,10 @@ Vint_Title:
 	bsr.w	Do_ControllerPal
 	bsr.w	ProcessDPLC
 	tst.w	(Demo_Time_left).w	; is there time left on the demo?
-	beq.w	+	; if not, return
+	beq.w	.end	; if not, return
 	subq.w	#1,(Demo_Time_left).w	; subtract 1 from time left in demo
-+
+
+.end:
 	rts
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 ;VintSub6
@@ -708,9 +724,10 @@ Do_Updates:
 	jsr	(HudUpdate).l
 	bsr.w	ProcessDPLC2
 	tst.w	(Demo_Time_left).w	; is there time left on the demo?
-	beq.w	+		; if not, branch
+	beq.w	.end		; if not, branch
 	subq.w	#1,(Demo_Time_left).w	; subtract 1 from time left in demo
-+
+
+.end:
 	rts
 ; End of function Do_Updates
 
@@ -970,11 +987,12 @@ Vint_Ending:
 	startZ80
 
 	move.w	(Ending_VInt_Subrout).w,d0
-	beq.s	+	; rts
+	beq.s	.end	; rts
 	clr.w	(Ending_VInt_Subrout).w
 	move.w	off_D3C-2(pc,d0.w),d0
 	jsr	off_D3C(pc,d0.w)
-+
+
+.end:
 	rts
 ; ===========================================================================
 off_D3C:	offsetTable
@@ -1017,9 +1035,10 @@ Vint_Menu:
 
 	bsr.w	ProcessDPLC
 	tst.w	(Demo_Time_left).w
-	beq.w	+	; rts
+	beq.w	.end	; rts
 	subq.w	#1,(Demo_Time_left).w
-+
+
+.end:
 	rts
 
 ; ||||||||||||||| S U B R O U T I N E |||||||||||||||||||||||||||||||||||||||
@@ -1055,7 +1074,7 @@ loc_EFE:
 ; Start of H-INT code
 H_Int:
 	tst.w	(Hint_flag).w
-	beq.w	+
+	beq.w	.end
 	tst.w	(Two_player_mode).w
 	beq.w	PalToCRAM
 	move.w	#0,(Hint_flag).w
@@ -1086,7 +1105,8 @@ H_Int:
 	move.w	d0,(VDP_control_port).l		; Display enable
 	move.l	(sp)+,d0
 	movea.l	(sp)+,a5
-+
+
+.end:
 	rte
 
 
@@ -1153,14 +1173,16 @@ loc_10C0:
 loc_10C4:
 	moveq	#4-1,d1
 				; FFE4 (Music_to_play_2) goes to 1B8C (zMusicToPlay),
--	move.b	1(a0,d1.w),d0	; FFE3 (unk_FFE3) goes to 1B8B, (unknown)
-	beq.s	+		; FFE2 (SFX_to_play_2) goes to 1B8A (zSFXToPlay2),
+.loop:
+	move.b	1(a0,d1.w),d0	; FFE3 (unk_FFE3) goes to 1B8B, (unknown)
+	beq.s	.next		; FFE2 (SFX_to_play_2) goes to 1B8A (zSFXToPlay2),
 	tst.b	zVar.SFXToPlay(a1,d1.w)	; FFE1 (SFX_to_play) goes to 1B89 (zSFXToPlay).
-	bne.s	+
+	bne.s	.next
 	clr.b	1(a0,d1.w)
 	move.b	d0,zVar.SFXToPlay(a1,d1.w)
-+
-	dbf	d1,-
+
+.next:
+	dbf	d1,.loop
 	rts
 ; End of function sndDriverInput
 
@@ -1304,10 +1326,11 @@ ClearScreen:
 	dmaFillVRAM 0,VRAM_Plane_B_Name_Table,VRAM_Plane_Table_Size	; Clear Plane B pattern name table
 
 	tst.w	(Two_player_mode).w
-	beq.s	+
+	beq.s	.singleplayer
 
 	dmaFillVRAM 0,VRAM_Plane_A_Name_Table_2P,VRAM_Plane_Table_Size
-+
+
+.singleplayer:
 	clr.l	(Vscroll_Factor).w
 	clr.l	(unk_F61A).w
 
@@ -1355,10 +1378,11 @@ JmpTo_SoundDriverLoad ; JmpTo
 ; sub_135E:
 PlayMusic:
 	tst.b	(Music_to_play).w
-	bne.s	+
+	bne.s	.usesecond
 	move.b	d0,(Music_to_play).w
 	rts
-+
+
+.usesecond:
 	move.b	d0,(Music_to_play_2).w
 	rts
 ; End of function PlayMusic
@@ -1406,12 +1430,13 @@ PauseGame:
 	tst.b	(Life_count).w	; do you have any lives left?
 	beq.w	Unpause		; if not, branch
 	tst.w	(Game_paused).w	; is game already paused?
-	bne.s	+		; if yes, branch
+	bne.s	.stop_game	; if yes, branch
 	move.b	(Ctrl_1_Press).w,d0 ; is Start button pressed?
 	or.b	(Ctrl_2_Press).w,d0 ; (either player)
 	andi.b	#button_start_mask,d0
 	beq.s	Pause_DoNothing	; if not, branch
-+
+
+.stop_game:
 	move.w	#1,(Game_paused).w	; freeze time
 	move.b	#MusID_Pause,(Music_to_play).w	; pause music
 ; loc_13B2:
@@ -1489,12 +1514,16 @@ Pause_SlowMo:
 PlaneMapToVRAM_H40:
 	lea	(VDP_data_port).l,a6
 	move.l	#vdpCommDelta(planeLocH40(0,1)),d4	; $800000
--	move.l	d0,VDP_control_port-VDP_data_port(a6)	; move d0 to VDP_control_port
+
+.loop_row:
+	move.l	d0,VDP_control_port-VDP_data_port(a6)	; move d0 to VDP_control_port
 	move.w	d1,d3
--	move.w	(a1)+,(a6)	; from source address to destination in VDP
-	dbf	d3,-		; next tile
+
+.loop_tile:
+	move.w	(a1)+,(a6)	; from source address to destination in VDP
+	dbf	d3,.loop_tile	; next tile
 	add.l	d4,d0		; increase destination address by $80 (1 line)
-	dbf	d2,--		; next line
+	dbf	d2,.loop_row	; next line
 	rts
 ; End of function PlaneMapToVRAM_H40
 
@@ -1509,12 +1538,16 @@ PlaneMapToVRAM_H40:
 PlaneMapToVRAM_H80_SpecialStage:
 	lea	(VDP_data_port).l,a6
 	move.l	#vdpCommDelta(planeLocH80(0,1)),d4	; $1000000
--	move.l	d0,VDP_control_port-VDP_data_port(a6)
+
+.loop_row:
+	move.l	d0,VDP_control_port-VDP_data_port(a6)
 	move.w	d1,d3
--	move.w	(a1)+,(a6)
-	dbf	d3,-
+
+.loop_tile:
+	move.w	(a1)+,(a6)
+	dbf	d3,.loop
 	add.l	d4,d0
-	dbf	d2,--
+	dbf	d2,.loop_row
 	rts
 ; End of function PlaneMapToVRAM_H80_SpecialStage
 
@@ -1812,9 +1845,10 @@ loc_1606:
 	lsl.w	d1,d5
 	subq.w	#1,d5
 
--	move.w	d7,(a1,d0.w)
+.loop:
+	move.w	d7,(a1,d0.w)
 	addq.w	#2,d0
-	dbf	d5,-
+	dbf	d5,.loop
 
 	bra.s	loc_15D8
 ; End of function NemDecPrepare
@@ -1854,12 +1888,13 @@ LoadPLC:
 	bra.s	-
 +
 	move.w	(a1)+,d0
-	bmi.s	+ ; if it's negative, skip the next loop
+	bmi.s	.skip ; if it's negative, skip the next loop
 
--	move.l	(a1)+,(a2)+
+.loop:	move.l	(a1)+,(a2)+
 	move.w	(a1)+,(a2)+
-	dbf	d0,-
-+
+	dbf	d0,.loop
+
+.skip:
 	movem.l	(sp)+,a1-a2 ; a1=object
 	rts
 ; End of function LoadPLC
@@ -1886,12 +1921,14 @@ LoadPLC2:
 	bsr.s	ClearPLC
 	lea	(Plc_Buffer).w,a2
 	move.w	(a1)+,d0
-	bmi.s	+ ; if it's negative, skip the next loop
+	bmi.s	.skip ; if it's negative, skip the next loop
 
--	move.l	(a1)+,(a2)+
+.loop:
+	move.l	(a1)+,(a2)+
 	move.w	(a1)+,(a2)+
-	dbf	d0,-
-+
+	dbf	d0,.loop
+
+.skip:
 	movem.l	(sp)+,a1-a2
 	rts
 ; End of function LoadPLC2
@@ -1905,8 +1942,10 @@ ClearPLC:
 	lea	(Plc_Buffer).w,a2
 
 	moveq	#bytesToLcnt(Plc_Buffer_End-Plc_Buffer),d0
--	clr.l	(a2)+
-	dbf	d0,-
+
+.loop:
+	clr.l	(a2)+
+	dbf	d0,.loop
 
 	rts
 ; End of function ClearPLC
@@ -1958,7 +1997,7 @@ RunPLC_RAM:
 ; sub_16E0:
 ProcessDPLC:
 	tst.w	(Plc_Buffer_Reg18).w
-	beq.w	+	; rts
+	beq.w	ProcessDPLC_Exit	; rts
 	move.w	#6,(Plc_Buffer_Reg1A).w
 	moveq	#0,d0
 	move.w	(Plc_Buffer+4).w,d0
@@ -1971,7 +2010,7 @@ ProcessDPLC:
 ; loc_16FC:
 ProcessDPLC2:
 	tst.w	(Plc_Buffer_Reg18).w
-	beq.s	+	; rts
+	beq.s	ProcessDPLC_Exit	; rts
 	move.w	#3,(Plc_Buffer_Reg1A).w
 	moveq	#0,d0
 	move.w	(Plc_Buffer+4).w,d0
@@ -1995,12 +2034,13 @@ ProcessDPLC_Main:
 	move.l	(Plc_Buffer_Reg14).w,d6
 	lea	(Decomp_Buffer).w,a1
 
--	movea.w	#8,a5
+.loop_tile:
+	movea.w	#8,a5
 	bsr.w	NemDec_WriteIter
 	subq.w	#1,(Plc_Buffer_Reg18).w
 	beq.s	ProcessDPLC_Pop
 	subq.w	#1,(Plc_Buffer_Reg1A).w
-	bne.s	-
+	bne.s	.loop_tile
 
 	move.l	a0,(Plc_Buffer).w
 	move.l	a3,(Plc_Buffer_Reg0).w
@@ -2009,7 +2049,8 @@ ProcessDPLC_Main:
 	move.l	d2,(Plc_Buffer_RegC).w
 	move.l	d5,(Plc_Buffer_Reg10).w
 	move.l	d6,(Plc_Buffer_Reg14).w
-+
+
+ProcessDPLC_Exit:
 	rts
 
 ; ===========================================================================
@@ -2019,8 +2060,10 @@ ProcessDPLC_Main:
 ProcessDPLC_Pop:
 	lea	(Plc_Buffer).w,a0
 	moveq	#bytesToLcnt(Plc_Buffer_Only_End-Plc_Buffer-6),d0
--	move.l	6(a0),(a0)+
-	dbf	d0,-
+
+.loop:
+	move.l	6(a0),(a0)+
+	dbf	d0,.loop
 	rts
 
 ; End of function ProcessDPLC
@@ -2040,7 +2083,9 @@ RunPLC_ROM:
 	lea	(a1,d0.w),a1
 
 	move.w	(a1)+,d1
--	movea.l	(a1)+,a0
+
+.loop:
+	movea.l	(a1)+,a0
 	moveq	#0,d0
 	move.w	(a1)+,d0
 	lsl.l	#2,d0
@@ -2049,7 +2094,7 @@ RunPLC_ROM:
 	swap	d0
 	move.l	d0,(VDP_control_port).l
 	bsr.w	NemDec
-	dbf	d1,-
+	dbf	d1,.loop
 
 	rts
 ; End of function RunPLC_ROM
@@ -3473,8 +3518,10 @@ PalLoad_ForFade:
 	adda.w	#Target_palette-Normal_palette,a3
 
 	move.w	(a1)+,d7
--	move.l	(a2)+,(a3)+
-	dbf	d7,-
+
+.loop:
+	move.l	(a2)+,(a3)+
+	dbf	d7,.loop
 
 	rts
 ; End of function PalLoad_ForFade
@@ -3491,8 +3538,9 @@ PalLoad_Now:
 	movea.w	(a1)+,a3
 
 	move.w	(a1)+,d7
--	move.l	(a2)+,(a3)+
-	dbf	d7,-
+
+.loop:	move.l	(a2)+,(a3)+
+	dbf	d7,.loop
 
 	rts
 ; End of function PalLoad_Now
@@ -3510,8 +3558,10 @@ PalLoad_Water_Now:
 	suba.l	#Normal_palette-Underwater_palette,a3
 
 	move.w	(a1)+,d7
--	move.l	(a2)+,(a3)+
-	dbf	d7,-
+
+.loop:
+	move.l	(a2)+,(a3)+
+	dbf	d7,.loop
 
 	rts
 ; End of function PalLoad_Water_Now
@@ -3529,8 +3579,10 @@ PalLoad_Water_ForFade:
 	suba.l	#Normal_palette-Underwater_target_palette,a3
 
 	move.w	(a1)+,d7
--	move.l	(a2)+,(a3)+
-	dbf	d7,-
+
+.loop:
+	move.l	(a2)+,(a3)+
+	dbf	d7,.loop
 
 	rts
 ; End of function PalLoad_Water_ForFade
@@ -3658,8 +3710,9 @@ Pal_Result:palette Special Stage Results Screen.bin ; Special Stage Results Scre
 WaitForVint:
 	move	#$2300,sr
 
--	tst.b	(Vint_routine).w
-	bne.s	-
+.wait:
+	tst.b	(Vint_routine).w
+	bne.s	.wait
 	rts
 ; End of function WaitForVint
 
@@ -3675,12 +3728,13 @@ WaitForVint:
 ; sub_3390:
 RandomNumber:
 	move.l	(RNG_seed).w,d1
-	bne.s	+
+	bne.s	.scramble
 	move.l	#$2A6D365A,d1 ; if the RNG is 0, reset it to this crazy number
 
 	; set the high word of d0 to be the high word of the RNG
 	; and multiply the RNG by 41
-+	move.l	d1,d0
+.scramble:
+	move.l	d1,d0
 	asl.l	#2,d1
 	add.l	d0,d1
 	asl.l	#3,d1
@@ -3901,12 +3955,16 @@ Sega_GotoTitle:
 PlaneMapToVRAM_H80_Sega:
 	lea	(VDP_data_port).l,a6
 	move.l	#vdpCommDelta(planeLocH80(0,1)),d4	; $1000000
--	move.l	d0,VDP_control_port-VDP_data_port(a6)
+
+.loop_row:
+	move.l	d0,VDP_control_port-VDP_data_port(a6)
 	move.w	d1,d3
--	move.w	(a1)+,(a6)
-	dbf	d3,-
+
+.loop_tile:
+	move.w	(a1)+,(a6)
+	dbf	d3,.loop_tile
 	add.l	d4,d0
-	dbf	d2,--
+	dbf	d2,.loop_row
 	rts
 ; End of function PlaneMapToVRAM_H80_Sega
 
@@ -4205,17 +4263,19 @@ TailsNameCheat:
 	adda.w	d0,a0
 	move.b	(Ctrl_1_Press).w,d0
 	andi.b	#button_up_mask|button_down_mask|button_left_mask|button_right_mask,d0
-	beq.s	++	; rts
+	beq.s	.end	; rts
 	cmp.b	(a0),d0
 	bne.s	+
 	addq.w	#1,(Correct_cheat_entries).w
 	tst.b	1(a0)		; read the next entry
-	bne.s	++		; if it's not zero, return
+	bne.s	.end		; if it's not zero, return
 	bchg	#7,(Graphics_Flags).w ; turn on the cheat that changes MILES to "TAILS"
 	move.b	#SndID_Ring,d0 ; play the ring sound for a successfully entered cheat
 	bsr.w	PlaySound
 +	move.w	#0,(Correct_cheat_entries).w
-+	rts
+
+.end:
+	rts
 ; End of function TailsNameCheat
 
 ; ===========================================================================
@@ -4326,10 +4386,11 @@ MusicList2: zoneOrderedTable 1,1
 Level:
 	bset	#GameModeFlag_TitleCard,(Game_Mode).w ; add $80 to screen mode (for pre level sequence)
 	tst.w	(Demo_mode_flag).w	; test the old flag for the credits demos (now unused)
-	bmi.s	+
+	bmi.s	.keep_music
 	move.b	#MusID_FadeOut,d0
 	bsr.w	PlaySound	; fade out music
-+
+
+.keep_music:
 	bsr.w	ClearPLC
 	bsr.w	Pal_FadeToBlack
 	tst.w	(Demo_mode_flag).w
@@ -4353,23 +4414,26 @@ Level:
 	lea	(a2,d0.w),a2
 	moveq	#0,d0
 	move.b	(a2),d0	; PLC1 ID
-	beq.s	+
+	beq.s	.no_plc
 	bsr.w	LoadPLC
-+
+
+.no_plc:
 	moveq	#PLCID_Std2,d0
 	bsr.w	LoadPLC
 	bsr.w	Level_SetPlayerMode
 	moveq	#PLCID_Miles1up,d0
 	tst.w	(Two_player_mode).w
-	bne.s	+
+	bne.s	.singleplayer
 	cmpi.w	#2,(Player_mode).w
 	bne.s	Level_ClrRam
 	addq.w	#PLCID_MilesLife-PLCID_Miles1up,d0
-+
-	tst.b	(Graphics_Flags).w
-	bpl.s	+
-	addq.w	#PLCID_Tails1up-PLCID_Miles1up,d0
-+
+
+.singleplayer:
+	tst.b	(Graphics_Flags).w	; are we in Japanese mode?
+	bpl.s	.keep_miles	; if not, branch
+	addq.w	#PLCID_Tails1up-PLCID_Miles1up,d0	; otherwise, switch to the "Tails" PLC
+
+.keep_miles:
 	bsr.w	LoadPLC
 ; loc_3F48:
 Level_ClrRam:
@@ -4386,12 +4450,13 @@ Level_ClrRam:
 	cmpi.b	#aquatic_ruin_zone,(Current_Zone).w ; ARZ
 	beq.s	Level_InitWater
 	cmpi.b	#hidden_palace_zone,(Current_Zone).w ; HPZ
-	bne.s	+
+	bne.s	Level_InitSkipWater
 
 Level_InitWater:
 	move.b	#1,(Water_flag).w
 	move.w	#0,(Two_player_mode).w
-+
+
+Level_InitSkipWater:
 	lea	(VDP_control_port).l,a6
 	move.w	#$8B03,(a6)		; EXT-INT disabled, V scroll by screen, H scroll by line
 	move.w	#$8200|(VRAM_Plane_A_Name_Table/$400),(a6)	; PNT A base: $C000
@@ -4401,23 +4466,26 @@ Level_InitWater:
 	move.w	#$8004,(a6)		; H-INT disabled
 	move.w	#$8720,(a6)		; Background palette/color: 2/0
 	move.w	#$8C81,(a6)		; H res 40 cells, no interlace
-	tst.b	(Debug_options_flag).w
-	beq.s	++
-	btst	#button_C,(Ctrl_1_Held).w
-	beq.s	+
+	tst.b	(Debug_options_flag).w	; has the debug mode cheat been input?
+	beq.s	.nodebug		; if not, branch
+	btst	#button_C,(Ctrl_1_Held).w	; is C pressed?
+	beq.s	.no_sh		; if not, branch
 	move.w	#$8C89,(a6)	; H res 40 cells, no interlace, S/H enabled
-+
+
+.no_sh:
 	btst	#button_A,(Ctrl_1_Held).w
-	beq.s	+
+	beq.s	.nodebug
 	move.b	#1,(Debug_mode_flag).w
-+
+
+.nodebug:
 	move.w	#$8ADF,(Hint_counter_reserve).w	; H-INT every 223rd scanline
 	tst.w	(Two_player_mode).w
-	beq.s	+
+	beq.s	.singleplayer
 	move.w	#$8A6B,(Hint_counter_reserve).w	; H-INT every 108th scanline
 	move.w	#$8014,(a6)			; H-INT enabled
 	move.w	#$8C87,(a6)			; H res 40 cells, double res interlace
-+
+
+.singleplayer:
 	move.w	(Hint_counter_reserve).w,(a6)
 	clr.w	(VDP_Command_Buffer).w
 	move.l	#VDP_Command_Buffer,(VDP_Command_Buffer_Slot).w
@@ -4655,9 +4723,10 @@ Level_MainLoop:
 	bsr.w	UpdateWaterSurface
 	jsr	(RingsManager).l
 	cmpi.b	#casino_night_zone,(Current_Zone).w	; is it CNZ?
-	bne.s	+			; if not, branch past jsr
+	bne.s	.not_cnz			; if not, branch past jsr
 	jsr	(SpecialCNZBumpers).l
-+
+
+.not_cnz:
 	jsrto	(AniArt_Load).l, JmpTo_AniArt_Load
 	bsr.w	PalCycle_Load
 	bsr.w	RunPLC_RAM
@@ -4667,30 +4736,32 @@ Level_MainLoop:
 	jsr	(BuildSprites).l
 	jsr	(ObjectsManager).l
 	cmpi.b	#GameModeID_Demo,(Game_Mode).w	; check if in demo mode
-	beq.s	+
+	beq.s	.run_demo
 	cmpi.b	#GameModeID_Level,(Game_Mode).w	; check if in normal play mode
 	beq.w	Level_MainLoop
 	rts
 ; ---------------------------------------------------------------------------
-+
+.run_demo:
 	tst.w	(Level_Inactive_flag).w
-	bne.s	+
+	bne.s	.end_of_demo
 	tst.w	(Demo_Time_left).w
-	beq.s	+
+	beq.s	.end_of_demo
 	cmpi.b	#GameModeID_Demo,(Game_Mode).w
 	beq.w	Level_MainLoop
 	move.b	#GameModeID_SegaScreen,(Game_Mode).w ; => SegaScreen
 	rts
 ; ---------------------------------------------------------------------------
-+
+.end_of_demo:
 	cmpi.b	#GameModeID_Demo,(Game_Mode).w
-	bne.s	+
+	bne.s	.fade_out
 	move.b	#GameModeID_SegaScreen,(Game_Mode).w ; => SegaScreen
-+
+
+.fade_out:
 	move.w	#1*60,(Demo_Time_left).w	; 1 second
 	move.w	#$3F,(Palette_fade_range).w
 	clr.w	(PalChangeSpeed).w
--
+
+.fade_loop:
 	move.b	#VintID_Level,(Vint_routine).w
 	bsr.w	WaitForVint
 	bsr.w	MoveSonicInDemo
@@ -4698,12 +4769,13 @@ Level_MainLoop:
 	jsr	(BuildSprites).l
 	jsr	(ObjectsManager).l
 	subq.w	#1,(PalChangeSpeed).w
-	bpl.s	+
+	bpl.s	.wait
 	move.w	#2,(PalChangeSpeed).w
 	bsr.w	Pal_FadeToBlack.UpdateAllColours
-+
+
+.wait:
 	tst.w	(Demo_Time_left).w
-	bne.s	-
+	bne.s	.fade_loop
 	rts
 
 ; ---------------------------------------------------------------------------
@@ -4716,13 +4788,14 @@ Level_MainLoop:
 ; sub_4450:
 Level_SetPlayerMode:
 	cmpi.b	#GameModeID_TitleCard|GameModeID_Demo,(Game_Mode).w ; pre-level demo mode?
-	beq.s	+			; if yes, branch
+	beq.s	.forceSonicTails	; if yes, branch
 	tst.w	(Two_player_mode).w	; 2P mode?
-	bne.s	+			; if yes, branch
+	bne.s	.forceSonicTails	; if yes, branch
 	move.w	(Player_option).w,(Player_mode).w ; use the option chosen in the Options screen
 	rts
 ; ---------------------------------------------------------------------------
-+	move.w	#0,(Player_mode).w	; force Sonic and Tails
+.forceSonicTails:
+	move.w	#0,(Player_mode).w	; force Sonic and Tails
 	rts
 ; End of function Level_SetPlayerMode
 
@@ -4738,11 +4811,11 @@ InitPlayers:
 	move.b	#ObjID_SpindashDust,(Sonic_Dust+id).w ; load Obj08 Sonic's spindash dust/splash object at $FFFFD100
 
 	cmpi.b	#wing_fortress_zone,(Current_Zone).w
-	beq.s	+ ; skip loading Tails if this is WFZ
+	beq.s	.end ; skip loading Tails if this is WFZ
 	cmpi.b	#death_egg_zone,(Current_Zone).w
-	beq.s	+ ; skip loading Tails if this is DEZ
+	beq.s	.end ; skip loading Tails if this is DEZ
 	cmpi.b	#sky_chase_zone,(Current_Zone).w
-	beq.s	+ ; skip loading Tails if this is SCZ
+	beq.s	.end ; skip loading Tails if this is SCZ
 
 	move.b	#ObjID_Tails,(Sidekick+id).w ; load Obj02 Tails object at $FFFFB040
 	move.w	(MainCharacter+x_pos).w,(Sidekick+x_pos).w
@@ -4750,7 +4823,8 @@ InitPlayers:
 	subi.w	#$20,(Sidekick+x_pos).w
 	addi_.w	#4,(Sidekick+y_pos).w
 	move.b	#ObjID_SpindashDust,(Tails_Dust+id).w ; load Obj08 Tails' spindash dust/splash object at $FFFFD140
-+
+
+.end:
 	rts
 ; ===========================================================================
 ; loc_44BE:
@@ -4783,19 +4857,21 @@ InitPlayers_TailsAlone:
 
 ; sub_44E4:
 UpdateWaterSurface:
-	tst.b	(Water_flag).w
-	beq.s	++	; rts
+	tst.b	(Water_flag).w	; is water enabled?
+	beq.s	.end	; if not, return
 	move.w	(Camera_X_pos).w,d1
 	btst	#0,(Timer_frames+1).w
-	beq.s	+
+	beq.s	.even
 	addi.w	#$20,d1
-+		; match obj x-position to screen position
+
+.even:		; match obj x-position to screen position
 	move.w	d1,d0
 	addi.w	#$60,d0
 	move.w	d0,(WaterSurface1+x_pos).w
 	addi.w	#$120,d1
 	move.w	d1,(WaterSurface2+x_pos).w
-+
+
+.end:
 	rts
 ; End of function UpdateWaterSurface
 
@@ -4819,36 +4895,41 @@ MoveWater:
 	clr.b	(Water_fullscreen_flag).w
 	moveq	#0,d0
 	cmpi.b	#aquatic_ruin_zone,(Current_Zone).w	; is level ARZ?
-	beq.s	+		; if yes, branch
+	beq.s	.arz		; if yes, branch
 	move.b	(Oscillating_Data).w,d0
 	lsr.w	#1,d0
-+
+
+.arz:
 	add.w	(Water_Level_2).w,d0
 	move.w	d0,(Water_Level_1).w
 		; calculate distance between water surface and top of screen
 	move.w	(Water_Level_1).w,d0
 	sub.w	(Camera_Y_pos).w,d0
-	bhs.s	+
+	bhs.s	.isbelow
 	tst.w	d0
-	bpl.s	+
+	bpl.s	.isbelow
 	move.b	#$DF,(Hint_counter_reserve+1).w	; H-INT every 224th scanline
 	move.b	#1,(Water_fullscreen_flag).w
-+
+
+.isbelow:
 	cmpi.w	#$DF,d0
-	blo.s	+
+	blo.s	.isvisible
 	move.w	#$DF,d0
-+
+
+.isvisible:
 	move.b	d0,(Hint_counter_reserve+1).w	; H-INT every d0 scanlines
 ; loc_456A:
 NonWaterEffects:
 	cmpi.b	#oil_ocean_zone,(Current_Zone).w	; is the level OOZ?
-	bne.s	+			; if not, branch
+	bne.s	.not_ooz		; if not, branch
 	bsr.w	OilSlides		; call oil slide routine
-+
+
+.not_ooz:
 	cmpi.b	#wing_fortress_zone,(Current_Zone).w	; is the level WFZ?
-	bne.s	+			; if not, branch
+	bne.s	.not_wfz		; if not, branch
 	bsr.w	WindTunnel		; call wind and block break routine
-+
+
+.not_wfz:
 	rts
 ; End of function WaterEffects
 
@@ -4904,12 +4985,14 @@ DynamicWater:
 	move.b	(Water_on).w,d1
 	move.w	(Water_Level_3).w,d0
 	sub.w	(Water_Level_2).w,d0
-	beq.s	++	; rts
-	bcc.s	+
+	beq.s	.exit	; rts
+	bcc.s	.movewater
 	neg.w	d1
-+
+
+.movewater:
 	add.w	d1,(Water_Level_2).w
-+
+
+.exit:
 	rts
 ; End of function DynamicWater
 
@@ -4979,9 +5062,11 @@ DynamicWaterNull:
 ; loc_45FA:
 DynamicWaterCPZ2:
 	cmpi.w	#$1DE0,(Camera_X_pos).w
-	blo.s	+	; rts
+	blo.s	.end	; rts
 	move.w	#$510,(Water_Level_3).w
-+	rts
+
+.end:
+	rts
 
 ; ||||||||||||||| S U B R O U T I N E |||||||||||||||||||||||||||||||||||||||
 ; Equates:
@@ -4997,7 +5082,9 @@ WindTunnel:
 	lea	(WindTunnelsCoordinates).l,a2
 	moveq	#(WindTunnelsCoordinates_End-WindTunnelsCoordinates)/8-1,d1
 	lea	(MainCharacter).w,a1 ; a1=character
--	; check for current wind tunnel if the main character is inside it
+
+WindTunnel_Loop:
+	; check for current wind tunnel if the main character is inside it
 	move.w	x_pos(a1),d0
 	cmp.w	windtunnel_min_x_pos(a2),d0
 	blo.w	WindTunnel_Leave	; branch, if main character is too far left
@@ -5019,19 +5106,21 @@ WindTunnel:
 	move.b	#AniIDSonAni_Float2,anim(a1)
 	bset	#1,status(a1)	; set "in-air" bit
 	btst	#button_up,(Ctrl_1_Held).w	; is Up being pressed?
-	beq.s	+				; if not, branch
+	beq.s	.not_up				; if not, branch
 	subq.w	#1,y_pos(a1)	; move up
-+
+
+.not_up:
 	btst	#button_down,(Ctrl_1_Held).w	; is Down being pressed?
-	beq.s	+				; if not, branch
+	beq.s	.not_down				; if not, branch
 	addq.w	#1,y_pos(a1)	; move down
-+
+
+.not_down:
 	rts
 ; ===========================================================================
 ; loc_4690:
 WindTunnel_Leave:
 	addq.w	#8,a2
-	dbf	d1,-	; check next tunnel
+	dbf	d1,WindTunnel_Loop	; check next tunnel
 	; when all wind tunnels have been checked
 	tst.b	(WindTunnel_flag).w
 	beq.s	WindTunnel_End
@@ -5057,12 +5146,13 @@ WindTunnelsCoordinates_End:
 OilSlides:
 	lea	(MainCharacter).w,a1 ; a1=character
 	move.b	(Ctrl_1_Held_Logical).w,d2
-	bsr.s	+
+	bsr.s	.slide
 	lea	(Sidekick).w,a1 ; a1=character
 	move.b	(Ctrl_2_Held_Logical).w,d2
-+
+
+.slide:
 	btst	#1,status(a1)
-	bne.s	+
+	bne.s	.inair
 	move.w	y_pos(a1),d0
 	add.w	d0,d0
 	andi.w	#$F00,d0
@@ -5075,21 +5165,26 @@ OilSlides:
 	lea	OilSlides_Chunks_End(pc),a2
 
 	moveq	#OilSlides_Chunks_End-OilSlides_Chunks-1,d1
--	cmp.b	-(a2),d0
-	dbeq	d1,-
+
+.loop:
+	cmp.b	-(a2),d0
+	dbeq	d1,.loop
 
 	beq.s	loc_4712
-+
+
+.inair:
     if status_sec_isSliding = 7
 	tst.b	status_secondary(a1)
-	bpl.s	+	; rts
+	bpl.s	.return	; rts
     else
 	btst	#status_sec_isSliding,status_secondary(a1)
-	beq.s	+	; rts
+	beq.s	.return	; rts
     endif
 	move.w	#5,move_lock(a1)
 	andi.b	#(~status_sec_isSliding_mask)&$FF,status_secondary(a1)
-+	rts
+
+.return:
+	rts
 ; ===========================================================================
 
 loc_4712:
@@ -5118,10 +5213,11 @@ loc_4712:
 	ori.b	#status_sec_isSliding_mask,status_secondary(a1)
 	move.b	(Vint_runcount+3).w,d0
 	andi.b	#$1F,d0
-	bne.s	+	; rts
+	bne.s	.return
 	move.w	#SndID_OilSlide,d0
 	jsr	(PlaySound).l
-+
+
+.return:
 	rts
 ; ===========================================================================
 
@@ -5205,13 +5301,13 @@ MoveSonicInDemo:
 
 	move.b	(Ctrl_1_Held).w,d0	; load input of player 1
 	cmp.b	(a1),d0			; is same button held?
-	bne.s	+			; if not, branch
+	bne.s	.next			; if not, branch
 	addq.b	#1,1(a1)		; increment press length counter
 	cmpi.b	#$FF,1(a1)		; is button held too long?
-	beq.s	+			; if yes, branch
+	beq.s	.next			; if yes, branch
 	bra.s	MoveDemo_Record_P2	; go to player 2
 ; ===========================================================================
-+
+.next:
 	move.b	d0,2(a1)		; store last button press
 	move.b	#0,3(a1)		; reset hold length counter
 	addq.w	#2,(Demo_button_index).w ; advance to next button press
@@ -5219,24 +5315,26 @@ MoveSonicInDemo:
 ; loc_486A:
 MoveDemo_Record_P2:
 	cmpi.b	#emerald_hill_zone,(Current_Zone).w
-	bne.s	++	; rts
+	bne.s	.return
 	lea	($FEC000).l,a1		; output location of recorded player 2 demo? (unknown)
 	move.w	(Demo_button_index_2P).w,d0
 	adda.w	d0,a1
 	move.b	(Ctrl_2_Held).w,d0	; load input of player 2
 	cmp.b	(a1),d0			; is same button held?
-	bne.s	+			; if not, branch
+	bne.s	.next			; if not, branch
 	addq.b	#1,1(a1)		; increment press length counter
 	cmpi.b	#$FF,1(a1)		; is button held too long?
-	beq.s	+			; if yes, branch
-	bra.s	++			; if not, return
+	beq.s	.next			; if yes, branch
+	bra.s	.return			; if not, return
 ; ===========================================================================
-+
+.next:
 	move.b	d0,2(a1)		; store last button press
 	move.b	#0,3(a1)		; reset hold length counter
 	addq.w	#2,(Demo_button_index_2P).w ; advance to next button press
 	andi.w	#$3FF,(Demo_button_index_2P).w ; wrap at max button press changes 1024
-+	rts
+
+.return:
+	rts
 	; end of inactive recording code
 ; ===========================================================================
 	; continue with MoveSonicInDemo:
@@ -5246,11 +5344,12 @@ MoveDemo_On:
 	move.b	(Ctrl_1_Press).w,d0
 	or.b	(Ctrl_2_Press).w,d0
 	andi.b	#button_start_mask,d0
-	beq.s	+
+	beq.s	.dontquit
 	tst.w	(Demo_mode_flag).w
-	bmi.s	+
+	bmi.s	.dontquit
 	move.b	#GameModeID_TitleScreen,(Game_Mode).w ; => TitleScreen
-+
+
+.dontquit:
 	lea	(DemoScriptPointers).l,a1 ; load pointer to input data
 	moveq	#0,d0
 	move.b	(Current_Zone).w,d0
@@ -5298,10 +5397,11 @@ MoveDemo_On_P2:
 	and.b	d1,d0
 	move.b	d0,(a0)+
 	subq.b	#1,(Demo_press_counter_2P).w
-	bcc.s	+	; rts
+	bcc.s	.return
 	move.b	3(a1),(Demo_press_counter_2P).w
 	addq.w	#2,(Demo_button_index_2P).w
-+
+
+.return:
 	rts
 ; ===========================================================================
 ; loc_4940:
@@ -5340,20 +5440,23 @@ DemoScriptPointers: zoneOrderedTable 4,1
 ; ---------------------------------------------------------------------------
 ; dword_498C:
 EndingDemoScriptPointers:
-	; these values are invalid addresses, but they were used for the ending
-	; demos, which aren't present in Sonic 2
-	dc.l   $8B0837
-	dc.l   $42085C	; 1
-	dc.l   $6A085F	; 2
-	dc.l   $2F082C	; 3
-	dc.l   $210803	; 4
+	; In Sonic 1, addresses for demos that play during the end credits were
+	; stored here, but Sonic 2 removed them, leaving only the pointer.
+
+	; The below values have no known purpose, but they exist in Sonic 1 as
+	; well as its dumped prototype (which doesn't have any credits demos).
+	dc.l $008B0837
+	dc.l $0042085C	; 1
+	dc.l $006A085F	; 2
+	dc.l $002F082C	; 3
+	dc.l $00210803	; 4
 	dc.l $28300808	; 5
-	dc.l   $2E0815	; 6
-	dc.l	$F0846	; 7
-	dc.l   $1A08FF	; 8
-	dc.l  $8CA0000	; 9
-	dc.l	     0	; 10
-	dc.l	     0	; 11
+	dc.l $002E0815	; 6
+	dc.l $000F0846	; 7
+	dc.l $001A08FF	; 8
+	dc.l $08CA0000	; 9
+	dc.l $00000000	; 10
+	dc.l $00000000	; 11
 
 
 
@@ -5381,7 +5484,7 @@ LoadCollisionIndexes:
 ; Pointers to primary collision indexes
 
 ; Contains an array of pointers to the primary collision index data for each
-; level. 1 pointer for each level, pointing the primary collision index.
+; level. 1 pointer for each level, pointing to the primary collision index.
 ; ---------------------------------------------------------------------------
 Off_ColP: zoneOrderedTable 4,1
 	zoneTableEntry.l ColP_EHZHTZ
@@ -5407,7 +5510,7 @@ Off_ColP: zoneOrderedTable 4,1
 ; Pointers to secondary collision indexes
 
 ; Contains an array of pointers to the secondary collision index data for
-; each level. 1 pointer for each level, pointing the secondary collision
+; each level. 1 pointer for each level, pointing to the secondary collision
 ; index.
 ; ---------------------------------------------------------------------------
 Off_ColS: zoneOrderedTable 4,1
@@ -5476,39 +5579,42 @@ Osc_Data_End:
 ; sub_4AC6:
 OscillateNumDo:
 	tst.w	(Two_player_mode).w
-	bne.s	+
+	bne.s	.twoplayer
 	cmpi.b	#6,(MainCharacter+routine).w
 	bhs.s	OscillateNumDo_Return
-+
+
+.twoplayer:
 	lea	(Oscillating_Numbers).w,a1
 	lea	(Osc_Data2).l,a2
 	move.w	(a1)+,d3
 	moveq	#bytesToLcnt(Osc_Data2_End-Osc_Data2),d1
 
--	move.w	(a2)+,d2
+.loop:
+	move.w	(a2)+,d2
 	move.w	(a2)+,d4
 	btst	d1,d3
-	bne.s	+
+	bne.s	.down
 	move.w	2(a1),d0
 	add.w	d2,d0
 	move.w	d0,2(a1)
 	_add.w	d0,0(a1)
 	_cmp.b	0(a1),d4
-	bhi.s	++
+	bhi.s	.next
 	bset	d1,d3
-	bra.s	++
+	bra.s	.next
 ; ===========================================================================
-+
+.down:
 	move.w	2(a1),d0
 	sub.w	d2,d0
 	move.w	d0,2(a1)
 	_add.w	d0,0(a1)
 	_cmp.b	0(a1),d4
-	bls.s	+
+	bls.s	.next
 	bclr	d1,d3
-+
+
+.next:
 	addq.w	#4,a1
-	dbf	d1,-
+	dbf	d1,.loop
 
 	move.w	d3,(Oscillation_Control).w
 ; return_4B22:
@@ -5548,27 +5654,30 @@ Osc_Data2_End:
 ; sub_4B64:
 ChangeRingFrame:
 	subq.b	#1,(Logspike_anim_counter).w
-	bpl.s	+
+	bpl.s	.ring
 	move.b	#$B,(Logspike_anim_counter).w
 	subq.b	#1,(Logspike_anim_frame).w ; animate unused log spikes
 	andi.b	#7,(Logspike_anim_frame).w
-+
+
+.ring:
 	subq.b	#1,(Rings_anim_counter).w
-	bpl.s	+
+	bpl.s	.unknown
 	move.b	#7,(Rings_anim_counter).w
 	addq.b	#1,(Rings_anim_frame).w ; animate rings in the level (obj25)
 	andi.b	#3,(Rings_anim_frame).w
-+
+
+.unknown:
 	subq.b	#1,(Unknown_anim_counter).w
-	bpl.s	+
+	bpl.s	.lostrings
 	move.b	#7,(Unknown_anim_counter).w
-	addq.b	#1,(Unknown_anim_frame).w ; animate nothing (deleted special stage object is my best guess)
+	addq.b	#1,(Unknown_anim_frame).w ; animate nothing (was unused in Sonic 1 as well)
 	cmpi.b	#6,(Unknown_anim_frame).w
-	blo.s	+
+	blo.s	.lostrings
 	move.b	#0,(Unknown_anim_frame).w
-+
+
+.lostrings:
 	tst.b	(Ring_spill_anim_counter).w
-	beq.s	+	; rts
+	beq.s	.return	; rts
 	moveq	#0,d0
 	move.b	(Ring_spill_anim_counter).w,d0
 	add.w	(Ring_spill_anim_accum).w,d0
@@ -5577,7 +5686,8 @@ ChangeRingFrame:
 	andi.w	#3,d0
 	move.b	d0,(Ring_spill_anim_frame).w ; animate scattered rings (obj37)
 	subq.b	#1,(Ring_spill_anim_counter).w
-+
+
+.return:
 	rts
 ; End of function ChangeRingFrame
 
@@ -5588,7 +5698,7 @@ ChangeRingFrame:
 
 nosignpost macro actid
 	cmpi.w	#actid,(Current_ZoneAndAct).w
-	beq.ATTRIBUTE	+	; rts
+	beq.ATTRIBUTE	LevelEnd_NoSignpost	; rts
     endm
 
 ; sub_4BD2:
@@ -5611,7 +5721,9 @@ SetLevelEndType:
 ; loc_4C40:
 LevelEnd_SetSignpost:
 	move.w	#1,(Level_Has_Signpost).w	; set level type to signpost
-+	rts
+
+LevelEnd_NoSignpost:
+	rts
 ; End of function SetLevelEndType
 
 
@@ -5620,9 +5732,9 @@ LevelEnd_SetSignpost:
 ; sub_4C48:
 CheckLoadSignpostArt:
 	tst.w	(Level_Has_Signpost).w
-	beq.s	+	; rts
+	beq.s	CheckLoadSignpostArtEnd	; rts
 	tst.w	(Debug_placement_mode).w
-	bne.s	+	; rts
+	bne.s	CheckLoadSignpostArtEnd	; rts
 	move.w	(Camera_X_pos).w,d0
 	move.w	(Camera_Max_X_pos).w,d1
 	subi.w	#$100,d1
@@ -5634,25 +5746,27 @@ CheckLoadSignpostArt:
 	beq.s	SignpostUpdateTailsBounds
 	move.w	d1,(Camera_Min_X_pos).w ; prevent camera from scrolling back to the left
 	tst.w	(Two_player_mode).w
-	bne.s	+	; rts
+	bne.s	CheckLoadSignpostArtEnd	; rts
 	moveq	#PLCID_Signpost,d0 ; <== PLC_1F
 	bra.w	LoadPLC2		; load signpost art
 ; ---------------------------------------------------------------------------
 ; loc_4C80:
 SignpostUpdateTailsBounds:
 	tst.w	(Two_player_mode).w
-	beq.s	+	; rts
+	beq.s	CheckLoadSignpostArtEnd	; rts
 	move.w	(Camera_X_pos_P2).w,d0
 	move.w	(Tails_Max_X_pos).w,d1
 	subi.w	#$100,d1
 	cmp.w	d1,d0
-	blt.s	+	; rts
+	blt.s	CheckLoadSignpostArtEnd	; rts
 	tst.b	(Update_HUD_timer_2P).w
-	beq.s	+	; rts
+	beq.s	CheckLoadSignpostArtEnd	; rts
 	cmp.w	(Tails_Min_X_pos).w,d1
-	beq.s	+	; rts
+	beq.s	CheckLoadSignpostArtEnd	; rts
 	move.w	d1,(Tails_Min_X_pos).w ; prevent Tails from going past new left boundary
-+	rts
+
+CheckLoadSignpostArtEnd:
+	rts
 ; End of function CheckLoadSignpostArt
 
 
@@ -5978,30 +6092,34 @@ LoadZoneTiles:
 	bsr.w	KosDec
 	move.w	a1,d3
 	cmpi.b	#hill_top_zone,(Current_Zone).w
-	bne.s	+
+	bne.s	.not_htz
 	lea	(ArtKos_HTZ).l,a0
 	lea	(Chunk_Table+tiles_to_bytes(ArtTile_ArtKos_NumTiles_HTZ_Main)).l,a1
 	bsr.w	KosDec	; patch for HTZ
 	move.w	#tiles_to_bytes(ArtTile_ArtKos_NumTiles_HTZ),d3
-+
+
+.not_htz:
 	cmpi.b	#wing_fortress_zone,(Current_Zone).w
-	bne.s	+
+	bne.s	.not_wfz
 	lea	(ArtKos_WFZ).l,a0
 	lea	(Chunk_Table+tiles_to_bytes(ArtTile_ArtKos_NumTiles_WFZ_Main)).l,a1
 	bsr.w	KosDec	; patch for WFZ
 	move.w	#tiles_to_bytes(ArtTile_ArtKos_NumTiles_WFZ),d3
-+
+
+.not_wfz:
 	cmpi.b	#death_egg_zone,(Current_Zone).w
-	bne.s	+
+	bne.s	.not_dez
 	move.w	#tiles_to_bytes(ArtTile_ArtKos_NumTiles_DEZ),d3
-+
+
+.not_dez:
 	move.w	d3,d7
 	andi.w	#$FFF,d3
 	lsr.w	#1,d3
 	rol.w	#4,d7
 	andi.w	#$F,d7
 
--	move.w	d7,d2
+.loop:
+	move.w	d7,d2
 	lsl.w	#7,d2
 	lsl.w	#5,d2
 	move.l	#$FFFFFF,d1
@@ -6013,7 +6131,7 @@ LoadZoneTiles:
 	bsr.w	RunPLC_RAM
 	move.w	(sp)+,d7
 	move.w	#$800,d3
-	dbf	d7,-
+	dbf	d7,.loop
 
 	rts
 ; End of function LoadZoneTiles
@@ -6044,21 +6162,22 @@ JmpTo_DrawInitialBG ; JmpTo
 ; loc_4F64:
 SpecialStage:
 	cmpi.b	#7,(Current_Special_Stage).w
-	blo.s	+
+	blo.s	.notlast
 	move.b	#0,(Current_Special_Stage).w
-+
+
+.notlast:
 	move.w	#SndID_SpecStageEntry,d0 ; play that funky special stage entry sound
 	bsr.w	PlaySound
 	move.b	#MusID_FadeOut,d0 ; fade out the music
 	bsr.w	PlayMusic
 	bsr.w	Pal_FadeToWhite
 	tst.w	(Two_player_mode).w
-	beq.s	+
+	beq.s	.singleplayer
 	move.w	#0,(Two_player_mode).w
 	st.b	(SS_2p_Flag).w ; set to -1
-	bra.s	++
+	bra.s	+
 ; ===========================================================================
-+
+.singleplayer:
 	sf.b	(SS_2p_Flag).w ; set to 0
 ; (!)
 +
@@ -6133,12 +6252,16 @@ SpecialStage:
 	move.l	#0,(Camera_X_pos_copy).w
 	move.l	#0,(Camera_Y_pos_copy).w
 	cmpi.w	#1,(Player_mode).w	; is this a Tails alone game?
-	bgt.s	+			; if yes, branch
+	bgt.s	.tailsalone		; if yes, branch
 	move.b	#ObjID_SonicSS,(MainCharacter+id).w ; load Obj09 (special stage Sonic)
 	tst.w	(Player_mode).w		; is this a Sonic and Tails game?
-	bne.s	++			; if not, branch
-+	move.b	#ObjID_TailsSS,(Sidekick+id).w ; load Obj10 (special stage Tails)
-+	move.b	#ObjID_SSHUD,(SpecialStageHUD+id).w ; load Obj5E (special stage HUD)
+	bne.s	.singleplayer		; if not, branch
+
+.tailsalone:
+	move.b	#ObjID_TailsSS,(Sidekick+id).w ; load Obj10 (special stage Tails)
+
+.singleplayer:
+	move.b	#ObjID_SSHUD,(SpecialStageHUD+id).w ; load Obj5E (special stage HUD)
 	move.b	#ObjID_StartBanner,(SpecialStageStartBanner+id).w ; load Obj5F (special stage banner)
 	move.b	#ObjID_SSNumberOfRings,(SpecialStageNumberOfRings+id).w ; load Obj87 (special stage ring count)
 	move.w	#$80,(SS_Offset_X).w
@@ -6370,10 +6493,10 @@ PalCycle_SS:
 	beq.w	SSCheckpoint_rainbow
 /
 	tst.b	(SS_Checkpoint_Rainbow_flag).w
-	beq.s	+	; rts
+	beq.s	.return	; rts
 	move.b	(Vint_runcount+3).w,d0
 	andi.b	#7,d0
-	bne.s	+	; rts
+	bne.s	.return	; rts
 	move.b	(SS_Rainbow_palette).w,d0
 	addi_.b	#1,(SS_Rainbow_palette).w
 	andi.b	#3,d0
@@ -6384,7 +6507,8 @@ PalCycle_SS:
 	move.w	word_54C4(pc,d0.w),(Normal_palette_line4+$16).w
 	move.w	word_54C6(pc,d0.w),(Normal_palette_line4+$18).w
 	move.w	word_54C8(pc,d0.w),(Normal_palette_line4+$1A).w
-+
+
+.return:
 	rts
 ; ===========================================================================
 ; special stage rainbow blinking sprite palettes... (Chaos Emerald colors?)
@@ -6426,14 +6550,16 @@ SSCheckpoint_rainbow:
 ;sub_5514
 SSLoadCurrentPerspective:
 	cmpi.b	#4,(SSTrack_drawing_index).w
-	bne.s	+	; rts
+	bne.s	.return	; rts
 	movea.l	#SSRAM_MiscKoz_SpecialPerspective,a0
 	moveq	#0,d0
 	move.b	(SSTrack_mapping_frame).w,d0
 	add.w	d0,d0
 	adda.w	(a0,d0.w),a0
 	move.l	a0,(SS_CurrentPerspective).w
-+	rts
+
+.return:
+	rts
 ; End of function SSLoadCurrentPerspective
 
 
@@ -7029,8 +7155,9 @@ SSTrackDrawRLE_Read7_Got0:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7055,8 +7182,9 @@ SSTrackDrawRLE_Read7_Got1:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7081,8 +7209,9 @@ SSTrackDrawRLE_Read7_Got2:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7107,8 +7236,9 @@ SSTrackDrawRLE_Read7_Got3:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7133,8 +7263,9 @@ SSTrackDrawRLE_Read7_Got4:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7159,8 +7290,9 @@ SSTrackDrawRLE_Read7_Got5:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7185,8 +7317,9 @@ SSTrackDrawRLE_Read7_Got6:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7205,8 +7338,9 @@ SSTrackDrawRLE_Read7_Got7:
 	move.w	2(a4,d2.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7224,8 +7358,9 @@ SSTrackDrawRLE_Read6_Got0:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7247,8 +7382,9 @@ SSTrackDrawRLE_Read6_Got1:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7270,8 +7406,9 @@ SSTrackDrawRLE_Read6_Got2:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7293,8 +7430,9 @@ SSTrackDrawRLE_Read6_Got3:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7316,8 +7454,9 @@ SSTrackDrawRLE_Read6_Got4:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7339,8 +7478,9 @@ SSTrackDrawRLE_Read6_Got5:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7356,8 +7496,9 @@ SSTrackDrawRLE_Read6_Got6:
 	move.w	2(a4,d2.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7374,8 +7515,9 @@ SSTrackDrawRLE_Read6_Got7:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawLoop_Inner
 ; ===========================================================================
@@ -7383,7 +7525,7 @@ SSTrackDrawRLE_Read6_Got7:
 ;loc_5D58
 SSTrackDraw_return:
 	cmpi.b	#3,(SSTrack_drawing_index).w					; Have we drawn a full frame?
-	beq.s	+								; Branch if yes
+	beq.s	.fullframedrawn							; Branch if yes
 	move.l	a0,(SSTrack_mappings_bitflags).w				; Save pointer
 	move.l	a1,(SSTrack_mappings_uncompressed).w				; Save pointer
 	move.l	a2,(SSTrack_mappings_RLE).w					; Save pointer
@@ -7391,7 +7533,7 @@ SSTrackDraw_return:
 	movem.w	d2-d7,-(a3)							; Save the bit buffers and bit counters
 	rts
 ; ===========================================================================
-+
+.fullframedrawn:
 	lea	(SSDrawRegBuffer).w,a2						; Pointer to registry buffer
 	moveq	#0,d0
     rept 6
@@ -7416,17 +7558,19 @@ SSTrackDrawLineFlipLoop:
 SSTrackDrawFlipLoop_Inner:
 	moveq	#0,d1
 	subq.w	#1,d7								; Subtract 1 from bit counter
-	bpl.s	+								; Branch if we still have bits we can use
+	bpl.s	.bitsremain							; Branch if we still have bits we can use
 	move.b	(a0)+,d6							; Get a new byte from bit flags
 	moveq	#7,d7								; We now have 8 fresh new bits
-+
+
+.bitsremain:
 	add.b	d6,d6								; Do we have to use RLE compression?
 	bcc.s	SSTrackDrawFlipRLE						; Branch if yes
 	subq.b	#1,d5								; Subtract 1 from bit counter
-	bpl.s	+								; Branch if we still have bits we can use
+	bpl.s	.morebitsremain							; Branch if we still have bits we can use
 	move.b	(a1)+,d4							; Get a new byte from uncompressed mappings pointer
 	moveq	#7,d5								; We now have 8 fresh new bits
-+
+
+.morebitsremain:
 	add.b	d4,d4								; Do we need a 10-bit index?
 	bcc.s	+								; Branch if not
 	move.w	#$A,d0								; d0 = 10 bits
@@ -7814,8 +7958,9 @@ SSTrackDrawFlipRLE_Read7_Got0:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -7840,8 +7985,9 @@ SSTrackDrawFlipRLE_Read7_Got1:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -7866,8 +8012,9 @@ SSTrackDrawFlipRLE_Read7_Got2:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -7892,8 +8039,9 @@ SSTrackDrawFlipRLE_Read7_Got3:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -7918,8 +8066,9 @@ SSTrackDrawFlipRLE_Read7_Got4:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -7944,8 +8093,9 @@ SSTrackDrawFlipRLE_Read7_Got5:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -7970,8 +8120,9 @@ SSTrackDrawFlipRLE_Read7_Got6:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -7990,8 +8141,9 @@ SSTrackDrawFlipRLE_Read7_Got7:
 	move.w	2(a4,d2.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -8009,8 +8161,9 @@ SSTrackDrawFlipRLE_Read6_Got0:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -8032,8 +8185,9 @@ SSTrackDrawFlipRLE_Read6_Got1:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -8055,8 +8209,9 @@ SSTrackDrawFlipRLE_Read6_Got2:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -8078,8 +8233,9 @@ SSTrackDrawFlipRLE_Read6_Got3:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -8101,8 +8257,9 @@ SSTrackDrawFlipRLE_Read6_Got4:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -8124,8 +8281,9 @@ SSTrackDrawFlipRLE_Read6_Got5:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -8141,8 +8299,9 @@ SSTrackDrawFlipRLE_Read6_Got6:
 	move.w	2(a4,d2.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 ; ===========================================================================
@@ -8159,8 +8318,9 @@ SSTrackDrawFlipRLE_Read6_Got7:
 	move.w	2(a4,d0.w),d0
 	ori.w	#palette_line_3|high_priority,d1
 
--	move.w	d1,-(a6)
-	dbf	d0,-
+.loop:
+	move.w	d1,-(a6)
+	dbf	d0,.loop
 
 	bra.w	SSTrackDrawFlipLoop_Inner
 
@@ -8608,7 +8768,8 @@ ssInitTableBuffers:
 	swap	d3
 	moveq	#$1F,d4
 
--	move.l	d0,(a1)+
+.loop:
+	move.l	d0,(a1)+
 	move.l	d0,(a1)+
 	move.l	d1,(a1)+
 	move.l	d1,(a1)+
@@ -8624,7 +8785,7 @@ ssInitTableBuffers:
 	move.l	d1,(a2)+
 	move.l	d0,(a2)+
 	move.l	d0,(a2)+
-	dbf	d4,-
+	dbf	d4,.loop
 
 	rts
 ; End of function ssInitTableBuffers
@@ -8643,11 +8804,12 @@ ssLdComprsdData:
 	move.w	(a0)+,d0
 	subq.w	#1,d0
 
--   rept 7
+.loop:
+   rept 7
 	move.l	(a0),(a1)
     endm
 	move.l	(a0)+,(a1)
-	dbf	d0,-
+	dbf	d0,.loop
 
 	lea	(MiscKoz_SpecialPerspective).l,a0
 	lea	(SSRAM_MiscKoz_SpecialPerspective).l,a1
@@ -8763,32 +8925,33 @@ SSPlaneB_SetHorizOffset:
 	jmp	off_6E54(pc,d0.w)
 ; ===========================================================================
 off_6E54:	offsetTable
-		offsetTableEntry.w +	; 0		; Turn, then rise
-		offsetTableEntry.w +	; 1		; Turn, then drop
-		offsetTableEntry.w +	; 2		; Turn, then straight
-		offsetTableEntry.w ++	; 3 ; rts	; Straight
-		offsetTableEntry.w ++	; 4 ; rts	; Straight, then turn
+		offsetTableEntry.w .turn	; 0	; Turn, then rise
+		offsetTableEntry.w .turn	; 1	; Turn, then drop
+		offsetTableEntry.w .turn	; 2	; Turn, then straight
+		offsetTableEntry.w .return	; 3	; Straight
+		offsetTableEntry.w .return	; 4	; Straight, then turn
 ; ===========================================================================
-+
+.turn:
 	moveq	#0,d1
 	cmpi.b	#1,d2							; Was the last frame the first in this segment?
-	blt.s	++							; Branch if yes
+	blt.s	.next							; Branch if yes
 	moveq	#2,d1
 	cmpi.b	#2,d2							; Was the last frame frame 1?
-	blt.s	++							; Branch if yes
+	blt.s	.next							; Branch if yes
 	moveq	#4,d1
 	cmpi.b	#$A,d2							; Was the last frame less than $A?
-	blt.s	++							; Branch if yes
+	blt.s	.next							; Branch if yes
 	moveq	#2,d1
 	cmpi.b	#$B,d2							; Was the last frame $A?
-	blt.s	++							; Branch if yes
+	blt.s	.next							; Branch if yes
 	moveq	#0,d1
 	cmpi.b	#$C,d2							; Was the last frame $B?
-	blt.s	++							; Branch if yes
-+
+	blt.s	.next							; Branch if yes
+
+.return:
 	rts
 ; ===========================================================================
-+
+.next:
 	moveq	#0,d0
 	moveq	#0,d2
 	move.b	(SSTrack_drawing_index).w,d0				; Get drawing position
@@ -8820,9 +8983,11 @@ off_6E54:	offsetTable
 	neg.w	d2							; Change the sign of the background offset
 +
 	move.w	#$FF,d0							; 256 lines
--	sub.w	d2,(a1)+						; Change current line's offset
+
+.loop:
+	sub.w	d2,(a1)+						; Change current line's offset
 	adda_.l	#2,a1							; Skip PNTA entry
-	dbf	d0,-
+	dbf	d0,.loop
 
 	rts
 ; End of function SSPlaneB_SetHorizOffset
@@ -8844,21 +9009,21 @@ SSTrack_SetVscroll:
 off_6EFE:	offsetTable
 		offsetTableEntry.w loc_6F0A	; 0		; Turn, then rise
 		offsetTableEntry.w loc_6F2A	; 1		; Turn, then drop
-		offsetTableEntry.w +		; 2 ; rts	; Turn, then straight
+		offsetTableEntry.w .return	; 2		; Turn, then straight
 		offsetTableEntry.w loc_6F4C	; 3		; Straight
-		offsetTableEntry.w +		; 4 ; rts	; Straight, then turn
+		offsetTableEntry.w .return	; 4		; Straight, then turn
 ; ===========================================================================
-+
+.return:
 	rts
 ; ===========================================================================
 
 loc_6F0A:
-	move.b	+(pc,d2.w),d1							; Get current frame's vertical scroll offset
+	move.b	.turnthenrise(pc,d2.w),d1					; Get current frame's vertical scroll offset
 	bpl.s	SSTrack_ApplyVscroll						; Branch if positive
 	rts
 ; ===========================================================================
 ; Special stage vertical scroll index for 'turn, then rise' animation
-+
+.turnthenrise:
 	dc.b  -1
 	dc.b  -1	; 1
 	dc.b  -1	; 2
@@ -8887,12 +9052,12 @@ loc_6F0A:
 
 loc_6F2A:
 	st	d7								; Set flag to increase vertical scroll
-	move.b	+(pc,d2.w),d1							; Get current frame's vertical scroll offset
+	move.b	.turnthendrop(pc,d2.w),d1					; Get current frame's vertical scroll offset
 	bpl.s	SSTrack_ApplyVscroll						; Branch if positive
 	rts
 ; ===========================================================================
 ; Special stage vertical scroll index for 'turn, then drop' animation
-+
+.turnthendrop:
 	dc.b  -1
 	dc.b  -1	; 1
 	dc.b  -1	; 2
@@ -8921,14 +9086,15 @@ loc_6F2A:
 
 loc_6F4C:
 	tst.b	(SS_Pause_Only_flag).w						; Is the game paused?
-	bne.s	+	; rts							; Return if yes
-	move.b	++(pc,d2.w),d1							; Get current frame's vertical scroll offset
+	bne.s	.return								; Return if yes
+	move.b	.updownbob(pc,d2.w),d1						; Get current frame's vertical scroll offset
 	bpl.s	SSTrack_ApplyVscroll						; Branch if positive
-+
+
+.return:
 	rts
 ; ===========================================================================
 ; Special stage vertical scroll index for 'straight' animation -- bobbing up and down
-+
+.updownbob
     rept 4
 	dc.b   6
 	dc.b   6
@@ -8945,11 +9111,11 @@ SSTrack_ApplyVscroll:
 	adda.w	(a0,d1.w),a0							; a0 = pointer to background scroll data for current animation frame
 	move.b	(a0,d0.w),d2							; Get background offset for current frame duration
 	tst.b	d7								; Are we supposed to increase the vertical scroll?
-	bpl.s	+								; Branch if not
+	bpl.s	.noinc								; Branch if not
 	add.w	d2,(Vscroll_Factor_BG).w					; Increase vertical scroll
 	rts
 ; ===========================================================================
-+
+.noinc:
 	sub.w	d2,(Vscroll_Factor_BG).w					; Decrease vertical scroll
 	rts
 ; End of function SSTrack_SetVscroll
@@ -8962,11 +9128,13 @@ SSSingleObjLoad:
 	lea	(SS_Dynamic_Object_RAM).w,a1
 	move.w	#(SS_Dynamic_Object_RAM_End-SS_Dynamic_Object_RAM)/object_size-1,d5
 
--	tst.b	id(a1)
-	beq.s	+	; rts
+.loop:
+	tst.b	id(a1)
+	beq.s	.return
 	lea	next_object(a1),a1 ; a1=object
-	dbf	d5,-
-+
+	dbf	d5,.loop
+
+.return:
 	rts
 ; End of function sub_6F8E
 
@@ -8981,23 +9149,25 @@ SSSingleObjLoad2:
     if object_size=$40
 	lsr.w	#6,d5
 	subq.w	#1,d5
-	bcs.s	+	; rts
+	bcs.s	.return
     else
 	lsr.w	#6,d5			; divide by $40
-	move.b	++(pc,d5.w),d5		; load the right number of objects from table
-	bmi.s	+			; if negative, we have failed!
+	move.b	.objtbl(pc,d5.w),d5	; load the right number of objects from table
+	bmi.s	.return			; if negative, we have failed!
     endif
 
--	tst.b	id(a1)
-	beq.s	+	; rts
+.loop:
+	tst.b	id(a1)
+	beq.s	.return
 	lea	next_object(a1),a1
-	dbf	d5,-
+	dbf	d5,.loop
 
-+	rts
+.return:
+	rts
 
 
     if object_size<>$40
-+	dc.b -1
+.objtbl:	dc.b -1
 .a :=	1		; .a is the object slot we are currently processing
 .b :=	1		; .b is used to calculate when there will be a conversion error due to object_size being > $40
 
@@ -9236,7 +9406,7 @@ word_728C_user: lea	(Obj5F_MapUnc_7240+$4C).l,a2 ; word_728C
 
 loc_7218:
 	subi_.w	#1,objoff_2A(a0)
-	bpl.s	+++	; rts
+	bpl.s	.return
 	tst.b	(SS_2p_Flag).w
 	beq.s	+
 	move.w	#$A,d0
@@ -9249,7 +9419,8 @@ loc_7218:
 	jmpto	(DeleteObject).l, JmpTo_DeleteObject
 ; ===========================================================================
 
-+	rts
+.return:
+	rts
 ; ===========================================================================
 
     if removeJmpTos
@@ -79274,11 +79445,12 @@ loc_3D640:
 	move.b	d0,anim(a0)
 	clr.b	prev_anim(a0)
 	cmpi.b	#2,d0
-	bne.s	+	; rts
+	bne.s	.return
 	movea.w	objoff_38(a0),a1 ; a1=object
 	move.b	#4,routine_secondary(a1)
 	move.b	#2,anim(a1)
-+
+
+.return:
 	rts
 ; ===========================================================================
 byte_3D680:
@@ -80247,10 +80419,10 @@ loc_3DF04:
 	jsrto	(ObjectMoveAndFall).l, JmpTo8_ObjectMoveAndFall
 	move.w	y_pos(a0),d0
 	cmpi.w	#$170,d0
-	bhs.s	+
+	bhs.s	.nodisplay
 	jmpto	(DisplaySprite).l, JmpTo45_DisplaySprite
 ; ===========================================================================
-+
+.nodisplay:
 	addq.b	#2,routine_secondary(a0)
 	move.w	#$170,y_pos(a0)
 	move.w	#$40,objoff_2A(a0)
@@ -80301,7 +80473,7 @@ ObjC7_FallingPieces:
 
 loc_3DFBA:
 	jsr	(SingleObjLoad).l
-	bne.s	+	; rts
+	bne.s	.return
 	_move.b	#ObjID_BossExplosion,id(a1) ; load obj
 	move.w	x_pos(a0),x_pos(a1)
 	move.w	y_pos(a0),y_pos(a1)
@@ -80316,7 +80488,8 @@ loc_3DFBA:
 	lsr.b	#2,d0
 	subi.w	#$30,d0
 	add.w	d0,y_pos(a1)
-+
+
+.return:
 	rts
 ; ===========================================================================
 ;loc_3DFF8
@@ -80329,7 +80502,7 @@ ObjC7_CheckHit:
 	beq.s	+
 	movea.w	objoff_36(a0),a1 ; a1=object
 	tst.b	collision_flags(a1)
-	bne.s	+++		; rts
+	bne.s	ObjC7_HitEnd	; rts
 	clr.b	collision_flags(a0)
 	subq.b	#1,collision_property(a0)
 	beq.s	ObjC7_Beaten
@@ -80347,12 +80520,13 @@ ObjC7_Flashing:
 +
 	move.w	d0,(a1)
 	subq.b	#1,objoff_2A(a0)
-	bne.s	+
+	bne.s	ObjC7_HitEnd
 	clr.w	(Normal_palette_line2+2).w
 	move.b	#$16,collision_flags(a0)
 	movea.w	objoff_36(a0),a1 ; a1=object
 	move.b	#$2A,collision_flags(a1)
-+
+
+ObjC7_HitEnd:
 	rts
 ; ===========================================================================
 ;loc_3E05A
@@ -80380,14 +80554,15 @@ ObjC7_Break:
 	moveq	#0,d0
 	moveq	#ObjC7_BreakOffsets_End-ObjC7_BreakOffsets-1,d6
 
--	move.b	(a1)+,d0
+.loop:
+	move.b	(a1)+,d0
 	movea.w	(a0,d0.w),a3 ; a3=object
 	move.b	#$1E,routine(a3)
 	clr.b	routine_secondary(a3)
 	move.w	#$80,objoff_2A(a3)
 	move.w	(a2)+,x_vel(a3)
 	move.w	(a2)+,y_vel(a3)
-	dbf	d6,-
+	dbf	d6,.loop
 	rts
 ; ===========================================================================
 ;word_3E0C6
@@ -80420,10 +80595,12 @@ ObjC7_InitCollision:
 	moveq	#0,d0
 
 	moveq	#ObjC7_ChildCollision_End-ObjC7_ChildCollision-1,d6
--	move.b	(a1)+,d0
+
+.loop:
+	move.b	(a1)+,d0
 	movea.w	(a0,d0.w),a3 ; a3=object
 	move.b	(a2)+,collision_flags(a3)
-	dbf	d6,-
+	dbf	d6,.loop
 
 	rts
 ; ===========================================================================
@@ -80460,10 +80637,11 @@ ObjC7_RemoveCollision:
 	moveq	#0,d0
 	moveq	#ObjC7_ChildOffsets_End-ObjC7_ChildOffsets-1,d6
 
--	move.b	(a1)+,d0
+.loop:
+	move.b	(a1)+,d0
 	movea.w	(a0,d0.w),a3 ; a3=object
 	clr.b	collision_flags(a3)
-	dbf	d6,-
+	dbf	d6,.loop
 	rts
 ; ===========================================================================
 ;loc_3E136
@@ -80471,16 +80649,18 @@ CreateEggmanBombs:
 	lea	EggmanBomb_InitSpeeds(pc),a3
 	moveq	#1,d6
 
--	lea	(ChildObjC7_EggmanBomb).l,a2
+.loop:
+	lea	(ChildObjC7_EggmanBomb).l,a2
 	bsr.w	LoadChildObject
 	move.w	(a3)+,d0
 	btst	#0,render_flags(a0)
-	beq.s	+
+	beq.s	.noflip
 	neg.w	d0
-+
+
+.noflip:
 	move.w	d0,x_vel(a1)
 	move.w	(a3)+,y_vel(a1)
-	dbf	d6,-
+	dbf	d6,.loop
 	rts
 ; ===========================================================================
 ;word_3E160
@@ -80495,7 +80675,8 @@ loc_3E168:
 	moveq	#0,d1
 	lea	byte_3E19E(pc),a1
 
--	move.b	(a1)+,d1
+.loop:
+	move.b	(a1)+,d1
 	beq.w	return_37A48
 	movea.w	(a0,d1.w),a2 ; a2=object
 	move.b	render_flags(a2),d2
@@ -80506,7 +80687,7 @@ loc_3E168:
 	andi.b	#$FE,d2
 	or.b	d0,d2
 	move.b	d2,status(a2)
-	bra.s	-
+	bra.s	.loop
 ; ===========================================================================
 byte_3E19E:
 	dc.b objoff_2C, objoff_2E, objoff_30, objoff_32	; 3
@@ -80540,7 +80721,8 @@ loc_3E1AA:
 	move.b	d2,objoff_1F(a0)
 	moveq	#0,d5
 
--	move.b	(a2)+,d5
+.loop:
+	move.b	(a2)+,d5
 	movea.w	(a0,d5.w),a3 ; a3=object
 	tst.w	d5
 	bne.s	+
@@ -80574,7 +80756,7 @@ loc_3E1AA:
 	asl.l	#8,d1
 	add.l	d1,d3
 	move.l	d3,y_pos(a3)
-	dbf	d0,-
+	dbf	d0,.loop
 
 	moveq	#0,d1
 	rts
@@ -80631,9 +80813,10 @@ loc_3E282:
 	move.w	x_pos(a2),d0
 	move.w	(a1)+,d1
 	btst	#0,render_flags(a2)
-	beq.s	+
+	beq.s	.noflip
 	neg.w	d1
-+
+
+.noflip:
 	add.w	d1,d0
 	move.w	d0,x_pos(a0)
 	move.w	y_pos(a2),d0
@@ -80647,15 +80830,18 @@ ObjC7_PositionChildren:
 	moveq	#0,d6
 
 	move.b	(a1)+,d6
--	move.b	(a1)+,d0
+
+.loop:
+	move.b	(a1)+,d0
 	movea.w	(a0,d0.w),a2 ; a2=object
 	move.w	x_pos(a0),d1
 	move.b	(a1)+,d2
 	ext.w	d2
 	btst	#0,render_flags(a0)
-	beq.s	+
+	beq.s	.noflip
 	neg.w	d2
-+
+
+.noflip:
 	add.w	d2,d1
 	move.w	d1,x_pos(a2)
 	move.w	y_pos(a0),d1
@@ -80663,7 +80849,7 @@ ObjC7_PositionChildren:
 	ext.w	d2
 	add.w	d2,d1
 	move.w	d1,y_pos(a2)
-	dbf	d6,-
+	dbf	d6,.loop
 	rts
 ; ===========================================================================
 ;byte_3E2E0
@@ -81032,8 +81218,8 @@ ObjC7_SubObjData:
 ; animation script
 ; off_3E59A:
 Ani_objC7_a:	offsetTable
-		offsetTableEntry.w +
-+		dc.b   7,$15,$15,$15,$15,$15,$15,$15,$15,  0,  1,  2,$FA
+		offsetTableEntry.w .anim
+.anim:		dc.b   7,$15,$15,$15,$15,$15,$15,$15,$15,  0,  1,  2,$FA
 		even
 
 ; animation script
@@ -81450,57 +81636,63 @@ Obj3E:
 ; ===========================================================================
 ; off_3F1F2:
 Obj3E_Index:	offsetTable
-		offsetTableEntry.w loc_3F212	;  0
-		offsetTableEntry.w loc_3F278	;  2
+		offsetTableEntry.w Obj3E_Init	;  0
+		offsetTableEntry.w Obj3E_Main	;  2
 		offsetTableEntry.w loc_3F354	;  4
 		offsetTableEntry.w loc_3F38E	;  6
 		offsetTableEntry.w loc_3F3A8	;  8
-		offsetTableEntry.w loc_3F406	; $A
+		offsetTableEntry.w Obj3E_EndAct	; $A
 ; ----------------------------------------------------------------------------
 ; byte_3F1FE:
-Obj3E_ObjLoadData:
+Obj3E_ObjLoadData:	
+	; y position offset from capsule, routine, width in pixels,
+	;  priority, mapping frame
 	dc.b   0,  2,$20,  4,  0
 	dc.b $28,  4,$10,  5,  4	; 5
 	dc.b $18,  6,  8,  3,  5	; 10
 	dc.b   0,  8,$20,  4,  0	; 15
+Obj3E_ObjLoadData_end:
 ; ===========================================================================
-
-loc_3F212:
+; loc_3F212:
+Obj3E_Init:
 	movea.l	a0,a1
 	lea	objoff_38(a0),a3
 	lea	Obj3E_ObjLoadData(pc),a2
-	moveq	#3,d1
-	bra.s	loc_3F228
+	moveq	#((Obj3E_ObjLoadData_end-Obj3E_ObjLoadData)/5)-1,d1
+	bra.s	.do_load
 ; ===========================================================================
 
-loc_3F220:
+; loc_3F220:
+.load_loop:
 	jsrto	(SingleObjLoad).l, JmpTo20_SingleObjLoad
-	bne.s	loc_3F272
+	bne.s	.fail	; if no space was found to spawn an object, branch
 	move.w	a1,(a3)+
 
-loc_3F228:
+; loc_3F228:
+.do_load:
 	_move.b	id(a0),id(a1) ; load obj
 	move.w	x_pos(a0),x_pos(a1)
 	move.w	y_pos(a0),y_pos(a1)
-	move.w	y_pos(a0),objoff_30(a1)
+	move.w	y_pos(a0),objoff_30(a1)	; set initial y-position
 	move.l	#Obj3E_MapUnc_3F436,mappings(a1)
 	move.w	#make_art_tile(ArtTile_ArtNem_Capsule,1,0),art_tile(a1)
 	move.b	#$84,render_flags(a1)
 	moveq	#0,d0
-	move.b	(a2)+,d0
-	sub.w	d0,y_pos(a1)
-	move.w	y_pos(a1),objoff_30(a1)
+	move.b	(a2)+,d0	; get y-position offset
+	sub.w	d0,y_pos(a1)	; subtract from earlier position
+	move.w	y_pos(a1),objoff_30(a1)	; apply changes to the saved original value, too
 	move.b	(a2)+,routine(a1)
 	move.b	(a2)+,width_pixels(a1)
 	move.b	(a2)+,priority(a1)
 	move.b	(a2)+,mapping_frame(a1)
 
-loc_3F272:
-	dbf	d1,loc_3F220
+; loc_3F272:
+.fail:
+	dbf	d1,.load_loop
 	rts
 ; ===========================================================================
-
-loc_3F278:
+; loc_3F278:
+Obj3E_Main:
 	moveq	#0,d0
 	move.b	routine_secondary(a0),d0
 	move.w	off_3F2AE(pc,d0.w),d1
@@ -81523,7 +81715,7 @@ off_3F2AE:	offsetTable
 loc_3F2B4:
 	movea.w	objoff_38(a0),a1 ; a1=object
 	tst.w	objoff_32(a1)
-	beq.s	++	; rts
+	beq.s	.return
 	movea.w	objoff_3A(a0),a2 ; a2=object
 	jsr	(SingleObjLoad).l
 	bne.s	+
@@ -81537,7 +81729,8 @@ loc_3F2B4:
 	addq.b	#2,routine_secondary(a2)
 	move.w	#$1D,objoff_34(a0)
 	addq.b	#2,routine_secondary(a0)
-+
+
+.return:
 	rts
 ; ===========================================================================
 
@@ -81549,7 +81742,8 @@ loc_3F2FC:
 	move.w	#$9A,d5
 	moveq	#-$1C,d4
 
--	jsr	(SingleObjLoad).l
+.loop:
+	jsr	(SingleObjLoad).l
 	bne.s	+
 	_move.b	#ObjID_Animal,id(a1) ; load obj
 	move.w	x_pos(a0),x_pos(a1)
@@ -81559,10 +81753,11 @@ loc_3F2FC:
 	addq.w	#7,d4
 	move.w	d5,objoff_36(a1)
 	subq.w	#8,d5
-	dbf	d6,-
+	dbf	d6,.loop
+
 +
 	movea.w	objoff_3C(a0),a2 ; a2=object
-	move.w	#$B4,anim_frame_duration(a2)
+	move.w	#180,anim_frame_duration(a2)
 	addq.b	#2,routine_secondary(a2)
 	addq.b	#2,routine_secondary(a0)
 
@@ -81601,15 +81796,15 @@ JmpTo66_DeleteObject ; JmpTo
 	jmp	(DeleteObject).l
     endif
 ; ===========================================================================
-
-loc_3F3A8:
+; loc_3F3A8:
+Obj3E_Animals:
 	tst.b	routine_secondary(a0)
-	beq.s	return_3F404
+	beq.s	.return
 	move.b	(Vint_runcount+3).w,d0
 	andi.b	#7,d0
-	bne.s	loc_3F3F4
+	bne.s	.noanimal
 	jsr	(SingleObjLoad).l
-	bne.s	loc_3F3F4
+	bne.s	.noanimal
 	_move.b	#ObjID_Animal,id(a1) ; load obj
 	move.w	x_pos(a0),x_pos(a1)
 	move.w	y_pos(a0),y_pos(a1)
@@ -81617,37 +81812,42 @@ loc_3F3A8:
 	andi.w	#$1F,d0
 	subq.w	#6,d0
 	tst.w	d1
-	bpl.s	+
+	bpl.s	.ispositive
 	neg.w	d0
-+
+
+.ispositive:
 	add.w	d0,x_pos(a1)
 	move.b	#1,objoff_38(a1)
 	move.w	#$C,objoff_36(a1)
 
-loc_3F3F4:
+; loc_3F3F4
+.noanimal:
 	subq.w	#1,anim_frame_duration(a0)
-	bne.s	return_3F404
+	bne.s	.return
 	addq.b	#2,routine(a0)
-	move.w	#$B4,anim_frame_duration(a0)
+	move.w	#180,anim_frame_duration(a0)
 
-return_3F404:
+; return_3F404:
+.return:
 	rts
 ; ===========================================================================
-
-loc_3F406:
+; loc_3F406:
+Obj3E_EndAct:
 	moveq	#(Dynamic_Object_RAM_End-Dynamic_Object_RAM)/object_size-1,d0
 	moveq	#ObjID_Animal,d1
 	lea	(Dynamic_Object_RAM).w,a1
 
--	cmp.b	id(a1),d1
-	beq.s	+	; rts
-	lea	next_object(a1),a1 ; a1=object
-	dbf	d0,-
+.findanimal:
+	cmp.b	id(a1),d1		; have we found space for an animal object?
+	beq.s	.found			; if yes, branch
+	lea	next_object(a1),a1	; otherwise, check the next space
+	dbf	d0,.findanimal
 
 	jsr	(Load_EndOfAct).l
 	jmp	(DeleteObject).l
 ; ===========================================================================
-+	rts
+.found:
+	rts
 ; ===========================================================================
 ; animation script
 ; off_3F428:
@@ -81693,9 +81893,10 @@ TouchResponse:
 	jsrto	(Touch_Rings).l, JmpTo_Touch_Rings
 	; Bumpers in CNZ
 	cmpi.b	#casino_night_zone,(Current_Zone).w
-	bne.s	+
+	bne.s	.not_cnz
 	jsrto	(Check_CNZ_bumpers).l, JmpTo_Check_CNZ_bumpers
-+
+
+.not_cnz:
 	tst.b	(Current_Boss_ID).w
 	bne.w	Touch_Boss
 	move.w	x_pos(a0),d2 ; load Sonic's position into d2,d3
@@ -81907,14 +82108,16 @@ Touch_ChkValue:
 	beq.s	Touch_Monitor		; if yes, branch
 	move.w	(MainCharacter+invulnerable_time).w,d0
 	tst.w	(Two_player_mode).w
-	beq.s	+
+	beq.s	.singleplayer
 	move.w	invulnerable_time(a0),d0
-+
+
+.singleplayer:
 	cmpi.w	#90,d0
-	bhs.w	+
+	bhs.w	.return
 	move.b	#4,routine(a1)	; set the object's routine counter
 	move.w	a0,parent(a1)
-+
+
+.return:
 	rts
 ; ===========================================================================
 ; loc_3F73C:
@@ -81951,12 +82154,13 @@ return_3F78A:
 ; loc_3F78C:
 Touch_Enemy:
 	btst	#status_sec_isInvincible,status_secondary(a0)	; is Sonic invincible?
-	bne.s	+			; if yes, branch
+	bne.s	.destroy_enemy			; if yes, branch
 	cmpi.b	#AniIDSonAni_Spindash,anim(a0)
-	beq.s	+
+	beq.s	destroy_enemy
 	cmpi.b	#AniIDSonAni_Roll,anim(a0)		; is Sonic rolling?
 	bne.w	Touch_ChkHurt		; if not, branch
-+
+
+.destroy_enemy:
 	btst	#6,render_flags(a1)
 	beq.s	Touch_Enemy_Part2
 	tst.b	boss_hitcount2(a1)
