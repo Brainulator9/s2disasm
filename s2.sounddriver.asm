@@ -148,10 +148,10 @@ zVar STRUCT DOTS
 	FadeOutDelay:		ds.b 1
 	Communication:		ds.b 1	; Unused byte used to synchronise gameplay events with music
 	DACUpdating:		ds.b 1	; Set to FFh while DAC is updating, then back to 00h
-	QueueToPlay:		ds.b 1	; If NOT set to 80h, means new index was requested by 68K
-	SFXToPlay:		ds.b 1	; When Genesis wants to play "normal" sound, it writes it here
-	SFXStereoToPlay:	ds.b 1	; When Genesis wants to play alternating stereo sound, it writes it here
-	SFXUnknown:		ds.b 1	; Unknown type of sound queue, but it's in Genesis code like it was once used
+	QueueToPlay:		ds.b 1	; The head of the queue
+	Queue0:			ds.b 1
+	Queue1:			ds.b 1
+	Queue2:			ds.b 1	; This slot was totally broken in Sonic 1's driver. It's mostly fixed here, but it's still a little broken (see 'zInitMusicPlayback').
 	VoiceTblPtr:		ds.b 2	; Address of the voices
 	FadeInFlag:		ds.b 1
 	FadeInDelay:		ds.b 1
@@ -388,7 +388,7 @@ zVInt:    rsttarget
 
 	push	af			; Save 'af'
 	exx				; Effectively backs up 'bc', 'de', and 'hl'
-	call	zBankSwitchToMusic	; Bank switch to the music (depending on which BGM is playing in this version)
+	call	zBankSwitchToMusic	; Bank switch to the music
 	xor	a			; Clear 'a'
 	ld	(zDoSFXFlag),a		; Not updating SFX (updating music)
 	ld	ix,zAbsVar		; ix points to zComRange
@@ -404,12 +404,14 @@ zUpdateEverything:
 	ld	a,(zAbsVar.FadeOutCounter)	; Are we fading out?
 	or	a
 	call	nz,zUpdateFadeout		; If so, update that
+
 	ld	a,(zAbsVar.FadeInFlag)		; Are we fading in?
 	or	a
 	call	nz,zUpdateFadeIn		; If so, update that
-	ld	a,(zAbsVar.SFXToPlay)		; zComRange+09h -- play normal sound
-	or	(ix+zVar.SFXStereoToPlay)	; zComRange+0Ah -- play stereo sound (alternating speakers)
-	or	(ix+zVar.SFXUnknown)		; zComRange+0Bh -- "unknown" slot
+
+	ld	a,(zAbsVar.Queue0)
+	or	(ix+zVar.Queue1)
+	or	(ix+zVar.Queue2)		; This was missing in Sonic 1's driver, breaking the third queue slot.
 	call	nz,zCycleQueue			; If any of those are non-zero, cycle queue
 
 	; Apparently if this is 80h, it does not play anything new,
@@ -1462,10 +1464,10 @@ zCycleQueue:
 	ld	a,(zAbsVar.QueueToPlay)		; Check if a sound request was made zComRange+08h
 	cp	80h				; Is queue slot equal to 80h?
 	ret	nz				; If not, return
-	ld	hl,zAbsVar.SFXToPlay		; Get address of next sound
+	ld	hl,zAbsVar.Queue0		; Get address of next sound
 	ld	a,(zAbsVar.SFXPriorityVal)	; Get current SFX priority
 	ld	c,a				; a -> c
-	ld	b,3				; b = 3
+	ld	b,3				; 3, for Queue0, Queue1, and Queue2
 
 zInputLoop:
 	ld	a,(hl)				; Get sound to play -> 'a'
@@ -2131,7 +2133,7 @@ zPlaySound:
 .sfx_loadloop:
 	push	bc		; Backup divisor/channel usage
 	xor	a		; a = 0 (will end up being NO CUSTOM VOICE TABLE!)
-	ld	(.bgmchannel+1),a	; Store into the instruction after .bgmchannel (self-modifying code) (Kind of pointless, always sets it to zero... maybe PSG would've had custom "flutter" tables?)
+	ld	(.is_psg+1),a	; Store into the instruction after .bgmchannel (self-modifying code)
 	push	hl		; Save current position within sound (offset 04h)
 	inc	hl		; Next byte...
 
@@ -2145,7 +2147,7 @@ zPlaySound:
 .sfxinitpsg:
 	; This is a PSG track!
 	; Always ends up writing zero to voice table pointer?
-	ld	(.bgmchannel+1),a	; Store into the instruction after .bgmchannel (self-modifying code)
+	ld	(.is_psg+1),a	; Store into the instruction after .bgmchannel (self-modifying code)
 	cp	0C0h		; Is this PSG3?
 	jr	nz,.getindex	; If not, skip this part
 	push	af
@@ -2238,10 +2240,11 @@ zPlaySound:
 	ldi						; *de++ = *hl++ (channel volume)
 
 ; zloc_A1D
-.bgmchannel:	; Modified way back within .sfx_loadloop
-	ld	a,0				; Self-modified code: if 00h, no custom voice table defined for this track
+.is_psg:	; Modified way back within .sfx_loadloop
+	ld	a,0				; Self-modified code
 	or	a				; Test it
-	jr	nz,.sfxpsginitdone		; If not zero, skip next part...
+	jr	nz,.sfxpsginitdone		; Jump, if this is a PSG track
+	; Do some more FM-related initialisation
 	ld	(ix+zTrack.AMSFMSPan),0C0h	; Default panning / AMS / FMS settings (just L/R Stereo enabled)
 
 ; zloc_A26
@@ -2404,7 +2407,7 @@ zUpdateFadeout:
 	inc	(ix+zTrack.Volume)		; increment channel volume (remember -- higher is quieter!)
 	ld	a,10h
 	cp	(ix+zTrack.Volume)		; Don't let volume go over 0Fh on PSG tracks!
-	jp	nc,.sendpsgvol			; This branch was inverted from Sonic 1's sound driver
+	jp	nc,.sendpsgvol
 	res	7,(ix+zTrack.PlaybackControl)	; Otherwise, stop playing this track
 	jr	.nextpsg
 
@@ -2514,9 +2517,14 @@ zInitMusicPlayback:
 	ld	b,(ix+zVar.SpeedUpFlag)		; Speed shoe flag
 	ld	c,(ix+zVar.FadeInCounter)	; Fade in frames
 	push	bc
-	ld	b,(ix+zVar.SFXToPlay)		; SFX queue slot
-	ld	c,(ix+zVar.SFXStereoToPlay)	; Stereo SFX queue slot
+	ld	b,(ix+zVar.Queue0)
+	ld	c,(ix+zVar.Queue1)
 	push	bc
+    if FixDriverBugs
+	; Queue2 isn't backed up! This was a bug in Sonic 1's driver as well.
+	ld	b,(ix+zVar.Queue2)
+	push	bc
+    endif
 	; The following clears all playback memory and non-SFX tracks
 	ld	hl,zAbsVar
 	ld	de,zAbsVar+1
@@ -2525,8 +2533,13 @@ zInitMusicPlayback:
 	ldir
 	; Restore those queue/flags:
 	pop	bc
-	ld	(ix+zVar.SFXToPlay),b		; SFX queue slot
-	ld	(ix+zVar.SFXStereoToPlay),c	; Stereo SFX queue slot
+	ld	(ix+zVar.Queue0),b
+	ld	(ix+zVar.Queue1),c
+    if FixDriverBugs
+	; Ditto.
+	pop	bc
+	ld	(ix+zVar.Queue2),b
+    endif
 	pop	bc
 	ld	(ix+zVar.SpeedUpFlag),b		; Speed shoe flag
 	ld	(ix+zVar.FadeInCounter),c	; Fade in frames
@@ -3829,30 +3842,30 @@ zSaxmanReadLoop:
 	exx				; shadow reg set
     if OptimiseDriver
 	srl	b			; b >> 1 (just a mask that lets us know when we need to reload)
-	jr	c,.continue		; if next bit of 'b' is set, we still have bits left in 'c', so continue
+	jr	c,.skip_fetching_descriptor	; if next bit of 'b' is set, we still have bits left in 'c', so continue
 	; If you get here, we're out of bits in 'c'!
 	call	zDecEndOrGetByte	; get next byte -> 'a'
 	ld	c,a			; a -> 'c'
 	ld	b,7Fh			; b = 7Fh (7 new bits in 'c')
 
-.continue:
+.skip_fetching_descriptor:
 	srl	c			; test next bit of 'c'
 	exx				; normal reg set
-	jr	nc,.is_compbit		; if bit not set, it's a compression bit; jump accordingly
+	jr	nc,.is_dictionary_reference	; if bit not set, it's a compression bit; jump accordingly
     else
 	srl	c			; c >> 1 (active control byte)
 	srl	b			; b >> 1 (just a mask that lets us know when we need to reload)
 	bit	0,b			; test next bit of 'b'
-	jr	nz,.continue		; if it's set, we still have bits left in 'c', so continue
+	jr	nz,.skip_fetching_descriptor	; if it's set, we still have bits left in 'c', so continue
 	; If you get here, we're out of bits in 'c'!
 	call	zDecEndOrGetByte	; get next byte -> 'a'
 	ld	c,a			; a -> 'c'
 	ld	b,0FFh			; b = FFh (8 new bits in 'c')
 
-.continue:
+.skip_fetching_descriptor:
 	bit	0,c			; test next bit of 'c'
 	exx				; normal reg set
-	jr	z,.is_compbit		; if bit not set, it's a compression bit; jump accordingly
+	jr	z,.is_dictionary_reference	; if bit not set, it's a compression bit; jump accordingly
     endif
 	; If you get here, there's a non-compressed byte
 	call	zDecEndOrGetByte	; get next byte -> 'a'
@@ -3863,7 +3876,7 @@ zSaxmanReadLoop:
 	exx				; normal reg set
 	jr	zSaxmanReadLoop		; loop back around...
 
-.is_compbit:
+.is_dictionary_reference:
 	call	zDecEndOrGetByte	; get next byte -> 'a'
 	ld	c,a			; a -> 'c' (low byte of target address)
 	call	zDecEndOrGetByte	; get next byte -> 'a'
@@ -3896,19 +3909,19 @@ zSaxmanReadLoop:
 	pop	hl			; shadow 'de' -> 'hl' (relative pointer, prior to all bytes read, relative)
 	or	a			; Clear carry
 	sbc	hl,bc			; hl -= bc
-	jr	nc,.skipbytes		; if result positive, jump ahead
+	jr	nc,.is_not_zero_fill	; if result positive, jump ahead
 	ex	de,hl			; current output pointer -> 'hl'
 	ld	b,a			; how many bytes to load -> 'b'
 
-.fillzeroloop:
+.fill_zero_loop:
 	ld	(hl),0			; fill in zeroes that many times
 	inc	hl
-	djnz	.fillzeroloop
+	djnz	.fill_zero_loop
 
 	ex	de,hl			; output pointer updated
 	jr	zSaxmanReadLoop		; loop back around...
 
-.skipbytes:
+.is_not_zero_fill:
 	ld	hl,zMusicData		; point at beginning of decompression point
 	add	hl,bc			; move ahead however many bytes
 	ld	c,a
