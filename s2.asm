@@ -1469,8 +1469,8 @@ PauseGame:
 	beq.w	Unpause
 	tst.b	(Time_Over_flag).w
 	bne.w	Unpause
-	tst.b   (Time_Over_flag_2P).w
-	bne.w   Unpause
+	tst.b	(Time_Over_flag_2P).w
+	bne.w	Unpause
     endif
 	tst.w	(Game_paused).w	; is game already paused?
 	bne.s	.stop_game	; if yes, branch
@@ -1588,7 +1588,7 @@ PlaneMapToVRAM_H80_SpecialStage:
 
 .loop_tile:
 	move.w	(a1)+,(a6)
-	dbf	d3,.loop
+	dbf	d3,.loop_tile
 	add.l	d4,d0
 	dbf	d2,.loop_row
 	rts
@@ -6527,12 +6527,12 @@ SpecialStage:
 	bgt.s	.tailsalone		; if yes, branch
 	move.b	#ObjID_SonicSS,(MainCharacter+id).w ; load Obj09 (special stage Sonic)
 	tst.w	(Player_mode).w		; is this a Sonic and Tails game?
-	bne.s	.singleplayer		; if not, branch
+	bne.s	.sonicalone		; if not, branch
 
 .tailsalone:
 	move.b	#ObjID_TailsSS,(Sidekick+id).w ; load Obj10 (special stage Tails)
 
-.singleplayer:
+.sonicalone:
 	move.b	#ObjID_SSHUD,(SpecialStageHUD+id).w ; load Obj5E (special stage HUD)
 	move.b	#ObjID_StartBanner,(SpecialStageStartBanner+id).w ; load Obj5F (special stage banner)
 	move.b	#ObjID_SSNumberOfRings,(SpecialStageNumberOfRings+id).w ; load Obj87 (special stage ring count)
@@ -10051,26 +10051,26 @@ loc_75DE:
 SSSetGeometryOffsets:
 	move.b	(SSTrack_drawing_index).w,d0					; Get drawing position
 	cmp.b	(SS_player_anim_frame_timer).w,d0				; Compare to player frame duration
-	beq.s	+												; If both are equal, branch
+	beq.s	+								; If both are equal, branch
 	rts
 ; ===========================================================================
 +
 	moveq	#0,d0
 	move.b	(SSTrack_mapping_frame).w,d0					; Get current track mapping frame
-	add.w	d0,d0											; Convert to index
-	lea	SSCurveOffsets(pc,d0.w),a2							; Load current curve offsets into a2
-	move.b	(a2)+,d0										; Get x offset
-	tst.b	(SSTrack_Orientation).w							; Is track flipped?
-	beq.s	+												; Branch if not
-	neg.b	d0												; Change sign of offset
+	add.w	d0,d0								; Convert to index
+	lea	SSCurveOffsets(pc,d0.w),a2					; Load current curve offsets into a2
+	move.b	(a2)+,d0							; Get x offset
+	tst.b	(SSTrack_Orientation).w						; Is track flipped?
+	beq.s	+								; Branch if not
+	neg.b	d0								; Change sign of offset
 +
-	ext.w	d0												; Extend to word
-	addi.w	#$80,d0											; Add 128 (why?)
-	move.w	d0,(SS_Offset_X).w								; Set X geometry offset
-	move.b	(a2),d0											; Get y offset
-	ext.w	d0												; Extend to word
-	addi.w	#$36,d0											; Add $36 (why?)
-	move.w	d0,(SS_Offset_Y).w								; Set Y geometry offset
+	ext.w	d0								; Extend to word
+	addi.w	#$80,d0								; Add 128 (why?)
+	move.w	d0,(SS_Offset_X).w						; Set X geometry offset
+	move.b	(a2),d0								; Get y offset
+	ext.w	d0								; Extend to word
+	addi.w	#$36,d0								; Add $36 (why?)
+	move.w	d0,(SS_Offset_Y).w						; Set Y geometry offset
 	rts
 ; End of function SSSetGeometryOffsets
 
@@ -12798,7 +12798,7 @@ LevelSelect_DrawIcon:
 	; during V-Int. To avoid this we can upload the colours ourselves right
 	; here.
 	; Prepare the VDP for data transfer.
-	move.l  #vdpComm(2*16*2,CRAM,WRITE),VDP_control_port-VDP_data_port(a6)
+	move.l	#vdpComm(2*16*2,CRAM,WRITE),VDP_control_port-VDP_data_port(a6)
     endif
 
 	moveq	#bytesToLcnt(palette_line_size),d1
@@ -15954,7 +15954,7 @@ SwScrl_HTZ:
 	dbf	d2,--
 
 	; 128 + 8 + 7 + 8 + 10 + 15 + 48 = 224
-	; All lines have bene written.
+	; All lines have been written.
 
 	rts
 ; ===========================================================================
@@ -17677,7 +17677,7 @@ SwScrl_ARZ:
 	add.w	d0,(Camera_Y_pos_copy).w
     if fixBugs
 	; Ditto
-	move.w d0,d3
+	move.w	d0,d3
     endif
 	; Shake camera X-pos
 	move.b	(a1)+,d2
@@ -24193,7 +24193,7 @@ Obj2D_Main:
 	bne.s	+
 	move.w	objoff_38(a0),d2
 	move.w	x_pos(a0),d3
-	tst.b	routine_secondary(a0)                ; check if barrier is moving up
+	tst.b	routine_secondary(a0)			; check if barrier is moving up
 	beq.s	++
 	move.w	objoff_3A(a0),d3
 	bra.s	++
@@ -24201,7 +24201,7 @@ Obj2D_Main:
 +
 	move.w	x_pos(a0),d2
 	move.w	objoff_3A(a0),d3
-	tst.b	routine_secondary(a0)                ; check if barrier is moving up
+	tst.b	routine_secondary(a0)			; check if barrier is moving up
 	beq.s	+
 	move.w	objoff_38(a0),d2
 +
@@ -24209,28 +24209,28 @@ Obj2D_Main:
 	move.w	d4,d5
 	subi.w	#$20,d4
 	addi.w	#$20,d5
-	move.b	#0,routine_secondary(a0)             ; set barrier to move down, check if characters are in area
+	move.b	#0,routine_secondary(a0)		; set barrier to move down, check if characters are in area
 	lea	(MainCharacter).w,a1 ; a1=character
 	bsr.s	Obj2D_CheckCharacter
 	lea	(Sidekick).w,a1 ; a1=character
 	bsr.s	Obj2D_CheckCharacter
-	tst.b	routine_secondary(a0)                ; check if barrier is moving up
+	tst.b	routine_secondary(a0)			; check if barrier is moving up
 	beq.s	+
-	cmpi.w	#$40,objoff_30(a0)                   ; check if barrier is high enough
+	cmpi.w	#$40,objoff_30(a0)			; check if barrier is high enough
 	beq.s	+++
-	addq.w	#8,objoff_30(a0)                     ; move barrier up
+	addq.w	#8,objoff_30(a0)			; move barrier up
 	bra.s	++
 ; ===========================================================================
 +
-	tst.w	objoff_30(a0)                        ; check if barrier is not in original position
+	tst.w	objoff_30(a0)				; check if barrier is not in original position
 	beq.s	++
-	subq.w	#8,objoff_30(a0)                     ; move barrier down
+	subq.w	#8,objoff_30(a0)			; move barrier down
 +
-	move.w	objoff_32(a0),d0                     ; set the barrier y position
+	move.w	objoff_32(a0),d0			; set the barrier y position
 	sub.w	objoff_30(a0),d0
 	move.w	d0,y_pos(a0)
 +
-	moveq	#0,d1                                ; perform solid object collision
+	moveq	#0,d1					; perform solid object collision
 	move.b	width_pixels(a0),d1
 	addi.w	#$B,d1
 	move.w	#$20,d2
@@ -24238,7 +24238,7 @@ Obj2D_Main:
 	addq.w	#1,d3
 	move.w	x_pos(a0),d4
 	jsrto	SolidObject, JmpTo2_SolidObject
-	bra.w	MarkObjGone                          ; delete object if off screen
+	bra.w	MarkObjGone				; delete object if off screen
 
 ; ||||||||||||||| S U B R O U T I N E |||||||||||||||||||||||||||||||||||||||
 
@@ -24258,7 +24258,7 @@ Obj2D_CheckCharacter:
 	bhs.w	return_11820
 	tst.b	obj_control(a1)
 	bmi.s	return_11820
-	move.b	#2,routine_secondary(a0)             ; set barrier to move up
+	move.b	#2,routine_secondary(a0)		; set barrier to move up
 
 return_11820:
 	rts
@@ -27737,10 +27737,10 @@ loc_141E6:
 	move.w	#SndID_TallyEnd,d0
 	jsr	(PlaySound).l
 	addq.b	#2,routine(a0)
-	move.w	#$B4,anim_frame_duration(a0)
+	move.w	#180,anim_frame_duration(a0)
 	cmpi.w	#1000,(Total_Bonus_Countdown).w
 	blo.s	return_14254
-	move.w	#$12C,anim_frame_duration(a0)
+	move.w	#300,anim_frame_duration(a0)
 	lea	next_object(a0),a1 ; a1=object
 
 loc_14214:
@@ -27758,11 +27758,10 @@ loc_14220:
 	move.l	#Obj3A_MapUnc_14CBC,mappings(a1)
 	bsr.w	Adjust2PArtPointer2
 	move.b	#0,render_flags(a1)
-	move.w	#$3C,anim_frame_duration(a1)
+	move.w	#60,anim_frame_duration(a1)
 	addq.b	#1,(Continue_count).w
 
 return_14254:
-
 	rts
 ; ===========================================================================
 
@@ -29501,7 +29500,7 @@ RunObjectDisplayOnly:
 	moveq	#0,d0
 	; This check prevent objects that don't exist from being displayed.
 	move.b	id(a0),d0	; get the object's ID
-	beq.s	+	; if it's obj00, skip it
+	beq.s	.no_object	; if it's obj00, skip it
 	; This check prevents objects that do exist, but haven't been initialised yet, from being displayed.
 	tst.b	render_flags(a0)	; was the object displayed on the previous frame?
 	bpl.s	.no_object			; if not, skip it
@@ -30551,11 +30550,11 @@ CellOffsets_YFlip:
 ; ===========================================================================
 ; loc_168B4:
 DrawSprite_FlipY:
--
+.loop:
     if fixBugs
 	; See the bugfix under 'DrawSprite_Loop'.
 	cmpi.b	#80,d5		; has the sprite limit been reached?
-	bhs.s	+		; if it has, branch
+	bhs.s	.end		; if it has, branch
     endif
 	move.b	(a1)+,d0
 	move.b	(a1),d4
@@ -30581,8 +30580,9 @@ DrawSprite_FlipY:
 
 .write_x:
 	move.w	d0,(a2)+	; set X pos
-	dbf	d1,-
-+
+	dbf	d1,.loop
+
+.end:
 	rts
 ; ===========================================================================
 ; offsets for vertically mirrored sprite pieces
@@ -30594,11 +30594,11 @@ CellOffsets_YFlip2:
 ; ===========================================================================
 ; loc_168FC:
 DrawSprite_FlipXY:
--
+.loop:
     if fixBugs
 	; See the bugfix under 'DrawSprite_Loop'.
 	cmpi.b	#80,d5		; has the sprite limit been reached?
-	bhs.s	+		; if it has, branch
+	bhs.s	.end		; if it has, branch
     endif
 	move.b	(a1)+,d0
 	move.b	(a1),d4
@@ -30628,8 +30628,9 @@ DrawSprite_FlipXY:
 
 .write_x:
 	move.w	d0,(a2)+
-	dbf	d1,-
-+
+	dbf	d1,.loop
+
+.end:
 	rts
 ; End of function DrawSprite
 
@@ -30942,7 +30943,7 @@ BuildSprites_P1_MultiDraw:
 	cmpi.w	#224,d1
 	bge.w	BuildSprites_P1_MultiDraw_NextObj
 	addi.w	#256,d2
-	bra.s	+
+	bra.s	BuildSprites_P1_MultiDraw_DrawSprite
 
 BuildSprites_P1_MultiDraw_ApproxYCheck:
 	move.w	y_pos(a0),d2
@@ -31229,7 +31230,7 @@ DrawSprite_2P_FlipX:
     if fixBugs
 	; See the bugfix under 'DrawSprite_Loop'.
 	cmpi.b	#80,d5		; has the sprite limit been reached?
-	bhs.s	+		; if it has, branch
+	bhs.s	.end		; if it has, branch
     endif
 	move.b	(a1)+,d0
 	ext.w	d0
@@ -31246,7 +31247,7 @@ DrawSprite_2P_FlipX:
 	move.w	d0,(a2)+
 	move.w	(a1)+,d0
 	neg.w	d0
-	move.b	byte_16E46(pc,d4.w),d4
+	move.b	CellOffsets_2P_XFlip(pc,d4.w),d4
 	sub.w	d4,d0
 	add.w	d3,d0
 	andi.w	#$1FF,d0
@@ -31256,7 +31257,8 @@ DrawSprite_2P_FlipX:
 .write_x:
 	move.w	d0,(a2)+
 	dbf	d1,.loop
-+
+
+.end:
 	rts
 ; ===========================================================================
 ; offsets for horizontally mirrored sprite pieces (2P)
@@ -31276,17 +31278,17 @@ CellOffsets_2P_YFlip:
 ; ===========================================================================
 ; loc_16E66:
 DrawSprite_2P_FlipY:
--
+.loop:
     if fixBugs
 	; See the bugfix under 'DrawSprite_Loop'.
 	cmpi.b	#80,d5		; has the sprite limit been reached?
-	bhs.s	+		; if it has, branch
+	bhs.s	.end		; if it has, branch
     endif
 	move.b	(a1)+,d0
 	move.b	(a1),d4
 	ext.w	d0
 	neg.w	d0
-	move.b	byte_16E56(pc,d4.w),d4
+	move.b	CellOffsets_2P_YFlip(pc,d4.w),d4
 	sub.w	d4,d0
 	add.w	d2,d0
 	move.w	d0,(a2)+
@@ -31307,8 +31309,9 @@ DrawSprite_2P_FlipY:
 
 .write_x:
 	move.w	d0,(a2)+
-	dbf	d1,-
-+
+	dbf	d1,.loop
+
+.end:
 	rts
 ; ===========================================================================
 ; cells are double the height in 2P mode, so halve the number of rows
@@ -31333,11 +31336,11 @@ CellOffsets_2P_YFlip2:
 ; ===========================================================================
 ; loc_16EC2:
 DrawSprite_2P_FlipXY:
--
+.loop:
     if fixBugs
 	; See the bugfix under 'DrawSprite_Loop'.
 	cmpi.b	#80,d5		; has the sprite limit been reached?
-	bhs.s	+		; if it has, branch
+	bhs.s	.end		; if it has, branch
     endif
 	move.b	(a1)+,d0
 	move.b	(a1),d4
@@ -31367,8 +31370,9 @@ DrawSprite_2P_FlipXY:
 
 .write_x:
 	move.w	d0,(a2)+
-	dbf	d1,-
-+
+	dbf	d1,.loop
+
+.end:
 	rts
 ; End of function DrawSprite_2P
 
@@ -32702,7 +32706,7 @@ ObjectsManager_Init:
 
 .no_respawn:
 	addq.w	#6,a0	; next object
-	bra.s	.chk_loop
+	bra.s	.check_loop
 ; ---------------------------------------------------------------------------
 loc_17B3E:
 	move.l	a0,(Obj_load_addr_right).w	; remember rightmost object that has been processed, so far (we still need to look forward)
@@ -62336,8 +62340,8 @@ Obj5D_Pipe_Extend:
 	; This code allocates one more object than necessary, leaving a
 	; partially initialised object in memory.
     if fixBugs
-	subq.w  #1,Obj5D_pipe_segments(a0)	; is pipe fully extended?
-	blt.s   Obj5D_Pipe_Extend_End		; if yes, branch
+	subq.w	#1,Obj5D_pipe_segments(a0)	; is pipe fully extended?
+	blt.s	Obj5D_Pipe_Extend_End		; if yes, branch
     endif
 	jsr	(SingleObjLoad2).l
 	beq.s	+
@@ -62348,11 +62352,11 @@ Obj5D_Pipe_Extend:
 ;Obj5D_Pipe_2_Load_Part2:
 Obj5D_Pipe_Extend_Part2:
     if ~~fixBugs
-	subq.w  #1,Obj5D_pipe_segments(a0)	; is pipe fully extended?
-	blt.s   Obj5D_Pipe_Extend_End		; if yes, branch
+	subq.w	#1,Obj5D_pipe_segments(a0)	; is pipe fully extended?
+	blt.s	Obj5D_Pipe_Extend_End		; if yes, branch
     endif
 
-	_move.b #ObjID_CPZBoss,id(a1)	; load obj5D
+	_move.b	#ObjID_CPZBoss,id(a1)	; load obj5D
 	move.l	#Obj5D_MapUnc_2EADC,mappings(a1)
 	move.w	#make_art_tile(ArtTile_ArtNem_CPZBoss,1,0),art_tile(a1)
 	move.b	#4,render_flags(a1)
@@ -76701,7 +76705,7 @@ ObjA7_GrabCharacter:
 	; just floating in the air, and when the player touches the ground,
 	; they'll dash off. To fix this, just clear the player's Spin Dash
 	; flag, like this:
-	clr.b spindash_flag(a1)
+	clr.b	spindash_flag(a1)
     endif
 	move.b	#1,mapping_frame(a0)
 	tst.w	y_vel(a0)
@@ -84812,7 +84816,7 @@ Obj3E_Index:	offsetTable
 		offsetTableEntry.w Obj3E_Main	;  2
 		offsetTableEntry.w loc_3F354	;  4
 		offsetTableEntry.w loc_3F38E	;  6
-		offsetTableEntry.w loc_3F3A8	;  8
+		offsetTableEntry.w Obj3E_Animals	;  8
 		offsetTableEntry.w Obj3E_EndAct	; $A
 ; ----------------------------------------------------------------------------
 ; byte_3F1FE:
